@@ -1,0 +1,1220 @@
+{% extends 'layout.html' %}
+
+{% block title %}Bitarr - Database Management{% endblock %}
+
+{% block content %}
+<div class="database-management">
+    <h1>Database Management</h1>
+
+    <!-- Sub-tabs Navigation -->
+    <div class="sub-tabs">
+        <div class="sub-tab active" data-tab="overview">Overview</div>
+        <div class="sub-tab" data-tab="maintenance">Maintenance</div>
+        <div class="sub-tab" data-tab="backups">Backups</div>
+        <div class="sub-tab" data-tab="advanced">Advanced</div>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="overview-tab" class="tab-content active">
+        <h2 class="section-title">Database Summary</h2>
+        <p>Click on a card to view more detailed information.</p>
+
+        <div class="stats-card-container">
+            <div class="stats-card">
+                <div class="stats-card-title">Database Size</div>
+                <div class="stats-card-value">{{ db_size_mb|default(0)|round(2) }} MB</div>
+                <div class="stats-card-subtitle">SQLite database</div>
+            </div>
+
+            <div class="stats-card" id="showTotalScans" data-target="manage-scans">
+                <div class="stats-card-title">Total Scans</div>
+                <div class="stats-card-value">{{ total_scans|default(0)|thousands_separator }}</div>
+                <div class="stats-card-subtitle">{{ unique_paths_count|default(0) }} unique paths <span style="float: right; color: var(--primary-color);">View All →</span></div>
+            </div>
+
+            <div class="stats-card" id="showTrackedFiles">
+                <div class="stats-card-title">Tracked Files</div>
+                <div class="stats-card-value">{{ file_stats.total|default(0)|thousands_separator }}</div>
+                <div class="stats-card-subtitle">{{ total_file_size|default(0)|format_size }} total size <span style="float: right; color: var(--primary-color);">View All →</span></div>
+            </div>
+
+            <div class="stats-card" id="showStorageDevices">
+                <div class="stats-card-title">Storage Devices</div>
+                <div class="stats-card-value">{{ storage_devices|length }}</div>
+                <div class="stats-card-subtitle">{{ storage_devices|selectattr('is_connected')|list|length }} currently connected <span style="float: right; color: var(--primary-color);">View All →</span></div>
+            </div>
+
+            <div class="stats-card">
+                <div class="stats-card-title">Oldest Scan</div>
+                <div class="stats-card-value">{{ db_info.first_scan_date|default('N/A') }}</div>
+                <div class="stats-card-subtitle">{{ db_info.days_since_first_scan|default(0) }} days ago</div>
+            </div>
+
+            <div class="stats-card">
+                <div class="stats-card-title">Last Scan</div>
+                <div class="stats-card-value">{{ db_info.last_scan_date|default('Never') }}</div>
+                <div class="stats-card-subtitle">{% if db_info.last_scan_time %}at {{ db_info.last_scan_time }}{% else %}No scans performed{% endif %}</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Database Health</h2>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Database Integrity</td>
+                        <td>Last checked: {{ db_health.integrity_check_date|default('Never') }}</td>
+                        <td>
+                            {% if db_health.integrity_status == 'ok' %}
+                                <span class="badge badge-success">Healthy</span>
+                            {% elif db_health.integrity_status == 'error' %}
+                                <span class="badge badge-danger">Error</span>
+                            {% else %}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {% endif %}
+                            <button class="btn small secondary" id="runIntegrityCheckBtn">Run Integrity Check</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Disk Space Used</td>
+                        <td>{{ db_health.disk_usage_percent|round(1) }}% ({{ db_health.disk_free|format_size }} free)</td>
+                        <td>
+                            {% if db_health.disk_status == 'sufficient' %}
+                                <span class="badge badge-success">Sufficient</span>
+                            {% else %}
+                                <span class="badge badge-warning">Low</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Vacuum Status</td>
+                        <td>Last run: {{ db_health.vacuum_date|default('Never') }}</td>
+                        <td>
+                            {% if db_health.vacuum_status == 'recent' %}
+                                <span class="badge badge-success">Recent</span>
+                            {% else %}
+                                <span class="badge badge-warning">Recommended</span>
+                            {% endif %}
+                            <button class="btn small secondary" id="optimizeDbBtn">Optimize Database</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Indexes</td>
+                        <td>{{ index_count }} indexes</td>
+                        <td>
+                            <span class="badge badge-success">Optimized</span>
+                            <button class="btn small secondary" id="runReindexBtn">Reindex</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Missing Files</td>
+                        <td>{{ db_health.missing_files|default(0)|thousands_separator }} files</td>
+                        <td>
+                            {% if db_health.missing_files_status == 'review_recommended' %}
+                                <span class="badge badge-warning">Review Recommended</span>
+                                <button class="btn small secondary" id="purgeMissingFilesBtn">Purge Missing</button>
+                            {% else %}
+                                <span class="badge badge-success">Good</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="button-group" style="margin-top: 20px;">
+            <button id="runVacuumBtn" class="btn secondary">Run Vacuum</button>
+        </div>
+    </div>
+
+    <!-- Maintenance Tab -->
+    <div id="maintenance-tab" class="tab-content">
+        <div class="notification notification-warning">
+            <div>
+                <strong>Warning:</strong> Some maintenance operations may temporarily lock the database. Ensure no scans are running before proceeding.
+            </div>
+        </div>
+
+        <h2 class="section-title">Database Reset Options</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <p style="margin-bottom: 15px;">Reset the database to clear scan history and tracked files. This operation cannot be undone.</p>
+
+                <div class="form-row">
+                    <div class="form-label">Reset Level:</div>
+                    <div class="form-input">
+                        <div style="margin-bottom: 10px;">
+                            <input type="radio" id="resetScanHistory" name="resetLevel" value="scan_history" checked>
+                            <label for="resetScanHistory">Scan History Only - Keeps schedules & configuration</label>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <input type="radio" id="resetFull" name="resetLevel" value="full">
+                            <label for="resetFull">Full Reset - Keeps only configuration settings</label>
+                        </div>
+                        <div>
+                            <input type="radio" id="resetComplete" name="resetLevel" value="complete">
+                            <label for="resetComplete">Complete Reset - Resets everything to default values</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button id="resetDatabaseBtn" class="btn danger">Reset Database</button>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Data Cleanup</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-label">Delete Scans Older Than:</div>
+                    <div class="form-input">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="oldScansAge" style="max-width: 200px;">
+                                <option value="30">30 days</option>
+                                <option value="90">90 days</option>
+                                <option value="180">180 days</option>
+                                <option value="365">1 year</option>
+                            </select>
+                            <button id="clearOldScansBtn" class="btn secondary">Clear Old Scans</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Purge Missing Files:</div>
+                    <div class="form-input">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="missingFilesDays" style="max-width: 200px;">
+                                <option value="30">Missing for 30+ days</option>
+                                <option value="90">Missing for 90+ days</option>
+                                <option value="180">Missing for 180+ days</option>
+                            </select>
+                            <button id="purgeMissingFilesBtn" class="btn secondary">Purge Missing Files</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Clean Orphaned Records:</div>
+                    <div class="form-input">
+                        <button id="purgeOrphanedRecordsBtn" class="btn secondary">Clean Orphaned Records</button>
+                        <div class="help-text">Remove orphaned records that don't have associated parent objects</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Performance Optimization</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-label">Database Optimization:</div>
+                    <div class="form-input">
+                        <button id="runVacuumBtn" class="btn secondary">Run Vacuum</button>
+                        <div class="help-text">Reclaim unused space and optimize database file</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Reindex Database:</div>
+                    <div class="form-input">
+                        <button id="runReindexBtn" class="btn secondary">Reindex Database</button>
+                        <div class="help-text">Rebuild all indexes to improve query performance</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backups Tab -->
+    <div id="backups-tab" class="tab-content">
+        <h2 class="section-title">Create Backup</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-label">Backup Name:</div>
+                    <div class="form-input">
+                        <input type="text" id="backupName" placeholder="Pre-update backup">
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button id="createBackupBtn" class="btn primary">Create Backup</button>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Automatic Backups</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-label">Enable Automatic Backups:</div>
+                    <div class="form-input">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableAutoBackups" {% if backup_settings.enabled %}checked{% endif %}>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="backup-options">
+                    <div class="form-row">
+                        <div class="form-label">Frequency:</div>
+                        <div class="form-input">
+                            <select id="backupFrequency">
+                                <option value="daily" {% if backup_settings.frequency == 'daily' %}selected{% endif %}>Daily</option>
+                                <option value="weekly" {% if backup_settings.frequency == 'weekly' %}selected{% endif %}>Weekly</option>
+                                <option value="monthly" {% if backup_settings.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Keep Backups:</div>
+                        <div class="form-input">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="number" id="backupRetain" value="{{ backup_settings.retain_count }}" min="1" max="100" style="max-width: 80px;">
+                                <span>most recent backups</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button id="saveBackupSettingsBtn" class="btn primary">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Backup History</h2>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Type</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if backups %}
+                        {% for backup in backups %}
+                            <tr>
+                                <td>{{ backup.date }}</td>
+                                <td>{{ backup.name }}</td>
+                                <td>{{ backup.size|format_size }}</td>
+                                <td>
+                                    {% if backup.type == 'auto' %}
+                                        <span class="badge badge-info">Auto</span>
+                                    {% else %}
+                                        <span class="badge badge-secondary">Manual</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn small secondary restore-backup-btn" data-id="{{ backup.id }}">Restore</button>
+                                    <button class="btn small danger delete-backup-btn" data-id="{{ backup.id }}">Delete</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="no-data">No backups found. Create a backup to protect your data.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Advanced Tab -->
+    <div id="advanced-tab" class="tab-content">
+        <div class="notification notification-warning">
+            <div>
+                <strong>Advanced Mode:</strong> These operations are intended for expert users. Incorrect usage may result in data loss.
+            </div>
+        </div>
+
+        <h2 class="section-title">Technical Operations</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <button class="btn secondary" id="runIntegrityBtn">Run Integrity Check</button>
+                    <button class="btn secondary" id="repairDatabaseBtn">Repair Database</button>
+
+                    <button class="btn secondary" id="exportSchemaBtn">Export Schema</button>
+                    <button class="btn secondary" id="rebuildIndexesBtn">Rebuild Indexes</button>
+                </div>
+
+                <h3 style="margin-top: 20px; font-size: 16px;">Export Options:</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+                    <button class="btn secondary" id="exportAllDataBtn">Export All Data</button>
+                    <button class="btn secondary" id="exportConfigBtn">Export Configuration</button>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Database Information</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="table-container">
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td>SQLite Version</td>
+                                <td>{{ db_info.sqlite_version|default('3.39.0') }}</td>
+                            </tr>
+                            <tr>
+                                <td>Page Size</td>
+                                <td>{{ db_info.page_size|default('4096') }} bytes</td>
+                            </tr>
+                            <tr>
+                                <td>Journal Mode</td>
+                                <td>{{ db_info.journal_mode|default('WAL') }}</td>
+                            </tr>
+                            <tr>
+                                <td>Encoding</td>
+                                <td>{{ db_info.encoding|default('UTF-8') }}</td>
+                            </tr>
+                            <tr>
+                                <td>Number of Tables</td>
+                                <td>{{ db_info.tables_count|default('7') }}</td>
+                            </tr>
+                            <tr>
+                                <td>Number of Indexes</td>
+                                <td>{{ index_count|default('18') }}</td>
+                            </tr>
+                            <tr>
+                                <td>Database Path</td>
+                                <td class="monospace">{{ db_info.database_path|default('/var/lib/bitarr/bitarr.db') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Database Modal -->
+<div id="resetDatabaseModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Reset Database</h3>
+            <button class="close-button">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="notification notification-danger">
+                <div><strong>Warning:</strong> This action cannot be undone. All scan data will be permanently deleted.</div>
+            </div>
+
+            <p style="margin-top: 20px;">You are about to reset the database. This will:</p>
+
+            <ul style="margin-bottom: 20px;">
+                <li>Delete all scan history records ({{ total_scans|default(0) }} scans)</li>
+                <li>Remove all file tracking data ({{ file_stats.total|default(0) }} files)</li>
+                <li>Clear all checksum history</li>
+                {% if active_scan_count > 0 %}
+                    <li>Stop {{ active_scan_count }} currently running scan{% if active_scan_count > 1 %}s{% endif %}</li>
+                {% endif %}
+            </ul>
+
+            <p>All configuration settings and scheduled scan definitions will be preserved.</p>
+
+            <div class="form-row" style="margin-top: 20px;">
+                <div class="form-label">Type "RESET" to confirm</div>
+                <div class="form-input">
+                    <input type="text" id="resetConfirmation" placeholder="Type RESET here">
+                </div>
+            </div>
+
+            <div class="button-group" style="margin-top: 15px;">
+                <button class="btn secondary close-modal">Cancel</button>
+                <button class="btn danger" id="confirmResetBtn" disabled>Reset Database</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Backup Modal -->
+<div id="restoreBackupModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Restore Backup</h3>
+            <button class="close-button">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="notification notification-warning">
+                <div><strong>Warning:</strong> Restoring a backup will replace your current database with the selected backup. All changes since the backup was created will be lost.</div>
+            </div>
+
+            <p style="margin-top: 20px;">You are about to restore the following backup:</p>
+
+            <div class="table-container" style="margin: 15px 0;">
+                <table>
+                    <tbody>
+                        <tr>
+                            <td>Date:</td>
+                            <td><strong id="restoreBackupDate"></strong></td>
+                        </tr>
+                        <tr>
+                            <td>Name:</td>
+                            <td><strong id="restoreBackupName"></strong></td>
+                        </tr>
+                        <tr>
+                            <td>Size:</td>
+                            <td><strong id="restoreBackupSize"></strong></td>
+                        </tr>
+                        <tr>
+                            <td>Type:</td>
+                            <td><strong id="restoreBackupType"></strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-row" style="margin-top: 20px;">
+                <div class="form-label">Type "RESTORE" to confirm</div>
+                <div class="form-input">
+                    <input type="text" id="restoreConfirmation" placeholder="Type RESTORE here">
+                </div>
+            </div>
+
+            <div class="button-group" style="margin-top: 15px;">
+                <button class="btn secondary close-modal">Cancel</button>
+                <button class="btn danger" id="confirmRestoreBtn" disabled>Restore Backup</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tab handling
+        const subTabs = document.querySelectorAll('.sub-tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        subTabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                subTabs.forEach(t => t.classList.remove('active'));
+
+                // Hide all tab contents
+                tabContents.forEach(content => content.style.display = 'none');
+
+                // Add active class to clicked tab
+                this.classList.add('active');
+
+                // Show the selected tab content
+                const tabId = this.dataset.tab + '-tab';
+                document.getElementById(tabId).style.display = 'block';
+            });
+        });
+
+        // Initialize tab display
+        tabContents.forEach(content => {
+            content.style.display = 'none';
+        });
+        document.getElementById('overview-tab').style.display = 'block';
+
+        // Storage devices card click
+        const showStorageDevicesCard = document.getElementById('showStorageDevices');
+        const storageDevicesModal = document.getElementById('storageDevicesModal');
+
+        if (showStorageDevicesCard && storageDevicesModal) {
+            showStorageDevicesCard.addEventListener('click', function() {
+                storageDevicesModal.style.display = 'flex';
+            });
+        }
+
+        // Tracked files card click
+        const showTrackedFilesCard = document.getElementById('showTrackedFiles');
+        const trackedFilesModal = document.getElementById('trackedFilesModal');
+
+        if (showTrackedFilesCard && trackedFilesModal) {
+            showTrackedFilesCard.addEventListener('click', function() {
+                trackedFilesModal.style.display = 'flex';
+            });
+        }
+
+        // Close modal buttons
+        const closeModalButtons = document.querySelectorAll('.close-modal, .close-button');
+        const modals = document.querySelectorAll('.modal');
+
+        closeModalButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const modal = this.closest('.modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+
+        // Run integrity check button
+        const runIntegrityCheckBtn = document.getElementById('runIntegrityCheckBtn');
+        const runIntegrityBtn = document.getElementById('runIntegrityBtn');
+
+        function runIntegrityCheck(button) {
+            if (!button) return;
+
+            const originalText = button.textContent;
+            button.textContent = 'Running...';
+            button.disabled = true;
+
+            fetch('/api/db/integrity_check')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.integrity_status === 'ok') {
+                            alert('Database integrity check completed successfully. No issues found.');
+                        } else {
+                            alert('Integrity check found issues:\n\n' + (data.errors ? data.errors.join('\n') : 'Unknown issues'));
+                        }
+                    } else {
+                        alert('Error running integrity check: ' + data.error);
+                    }
+
+                    // Restore button state
+                    button.textContent = originalText;
+                    button.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error running integrity check. Please try again.');
+
+                    // Restore button state
+                    button.textContent = originalText;
+                    button.disabled = false;
+                });
+        }
+
+        if (runIntegrityCheckBtn) {
+            runIntegrityCheckBtn.addEventListener('click', function() {
+                runIntegrityCheck(this);
+            });
+        }
+
+        if (runIntegrityBtn) {
+            runIntegrityBtn.addEventListener('click', function() {
+                runIntegrityCheck(this);
+            });
+        }
+
+        // Optimize database button
+        const optimizeDbBtn = document.getElementById('optimizeDbBtn');
+        const runVacuumBtn = document.getElementById('runVacuumBtn');
+
+        function runVacuum(button) {
+            if (!button) return;
+
+            const originalText = button.textContent;
+            button.textContent = 'Running...';
+            button.disabled = true;
+
+            fetch('/api/db/vacuum', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Database optimization completed successfully.');
+                } else {
+                    alert('Error optimizing database: ' + data.error);
+                }
+
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error optimizing database. Please try again.');
+
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
+            });
+        }
+
+        if (optimizeDbBtn) {
+            optimizeDbBtn.addEventListener('click', function() {
+                runVacuum(this);
+            });
+        }
+
+        if (runVacuumBtn) {
+            runVacuumBtn.addEventListener('click', function() {
+                runVacuum(this);
+            });
+        }
+
+        // Reindex database button
+        const runReindexBtn = document.getElementById('runReindexBtn');
+        const rebuildIndexesBtn = document.getElementById('rebuildIndexesBtn');
+
+        function runReindex(button) {
+            if (!button) return;
+
+            const originalText = button.textContent;
+            button.textContent = 'Running...';
+            button.disabled = true;
+
+            fetch('/api/db/reindex', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Database reindexing completed successfully.');
+                } else {
+                    alert('Error reindexing database: ' + data.error);
+                }
+
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error reindexing database. Please try again.');
+
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
+            });
+        }
+
+        if (runReindexBtn) {
+            runReindexBtn.addEventListener('click', function() {
+                runReindex(this);
+            });
+        }
+
+        if (rebuildIndexesBtn) {
+            rebuildIndexesBtn.addEventListener('click', function() {
+                runReindex(this);
+            });
+        }
+
+        // Reset database button
+        const resetDatabaseBtn = document.getElementById('resetDatabaseBtn');
+        const resetDatabaseModal = document.getElementById('resetDatabaseModal');
+        const resetConfirmation = document.getElementById('resetConfirmation');
+        const confirmResetBtn = document.getElementById('confirmResetBtn');
+        const resetLevelRadios = document.getElementsByName('resetLevel');
+
+        if (resetDatabaseBtn && resetDatabaseModal && resetConfirmation && confirmResetBtn) {
+            resetDatabaseBtn.addEventListener('click', function() {
+                resetDatabaseModal.style.display = 'flex';
+                resetConfirmation.value = '';
+                confirmResetBtn.disabled = true;
+            });
+
+            resetConfirmation.addEventListener('input', function() {
+                confirmResetBtn.disabled = this.value !== 'RESET';
+            });
+
+            confirmResetBtn.addEventListener('click', function() {
+                // Get selected reset level
+                let selectedLevel = 'scan_history'; // default
+                resetLevelRadios.forEach(radio => {
+                    if (radio.checked) {
+                        selectedLevel = radio.value;
+                    }
+                });
+
+                const endpoint = '/api/db/reset/' + selectedLevel;
+
+                // Show loading state
+                confirmResetBtn.textContent = 'Resetting...';
+                confirmResetBtn.disabled = true;
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ confirmation: 'RESET' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Close modal
+                    resetDatabaseModal.style.display = 'none';
+
+                    if (data.success) {
+                        alert('Database has been reset successfully.');
+                        // Reload page
+                        window.location.reload();
+                    } else {
+                        alert('Error resetting database: ' + data.error);
+                        confirmResetBtn.textContent = 'Reset Database';
+                        confirmResetBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error resetting database. Please try again.');
+
+                    resetDatabaseModal.style.display = 'none';
+                    confirmResetBtn.textContent = 'Reset Database';
+                    confirmResetBtn.disabled = false;
+                });
+            });
+        }
+
+        // Restore Backup functionality
+        const restoreBackupBtns = document.querySelectorAll('.restore-backup-btn');
+        const restoreBackupModal = document.getElementById('restoreBackupModal');
+        const restoreConfirmation = document.getElementById('restoreConfirmation');
+        const confirmRestoreBtn = document.getElementById('confirmRestoreBtn');
+        const restoreBackupDate = document.getElementById('restoreBackupDate');
+        const restoreBackupName = document.getElementById('restoreBackupName');
+        const restoreBackupSize = document.getElementById('restoreBackupSize');
+        const restoreBackupType = document.getElementById('restoreBackupType');
+
+        if (restoreBackupBtns.length > 0 && restoreBackupModal && restoreConfirmation && confirmRestoreBtn) {
+            restoreBackupBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const backupId = this.getAttribute('data-id');
+                    const row = this.closest('tr');
+
+                    // Get backup details from the row
+                    const date = row.cells[0].textContent.trim();
+                    const name = row.cells[1].textContent.trim();
+                    const size = row.cells[2].textContent.trim();
+                    const type = row.cells[3].textContent.trim();
+
+                    // Update modal with backup details
+                    if (restoreBackupDate) restoreBackupDate.textContent = date;
+                    if (restoreBackupName) restoreBackupName.textContent = name;
+                    if (restoreBackupSize) restoreBackupSize.textContent = size;
+                    if (restoreBackupType) restoreBackupType.textContent = type;
+
+                    // Set backup ID for restore action
+                    confirmRestoreBtn.setAttribute('data-id', backupId);
+
+                    // Show modal
+                    restoreBackupModal.style.display = 'flex';
+                    restoreConfirmation.value = '';
+                    confirmRestoreBtn.disabled = true;
+                });
+            });
+
+            restoreConfirmation.addEventListener('input', function() {
+                confirmRestoreBtn.disabled = this.value !== 'RESTORE';
+            });
+
+            confirmRestoreBtn.addEventListener('click', function() {
+                const backupId = this.getAttribute('data-id');
+                if (!backupId) {
+                    alert('Invalid backup ID.');
+                    return;
+                }
+
+                const endpoint = '/api/db/backup/' + backupId + '/restore';
+
+                // Show loading state
+                confirmRestoreBtn.textContent = 'Restoring...';
+                confirmRestoreBtn.disabled = true;
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ confirmation: 'RESTORE' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Close modal
+                    restoreBackupModal.style.display = 'none';
+
+                    if (data.success) {
+                        alert('Backup has been restored successfully.');
+                        // Reload page
+                        window.location.reload();
+                    } else {
+                        alert('Error restoring backup: ' + data.error);
+                        confirmRestoreBtn.textContent = 'Restore Backup';
+                        confirmRestoreBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error restoring backup. Please try again.');
+
+                    restoreBackupModal.style.display = 'none';
+                    confirmRestoreBtn.textContent = 'Restore Backup';
+                    confirmRestoreBtn.disabled = false;
+                });
+            });
+        }
+
+        // Data cleanup functions
+        const clearOldScansBtn = document.getElementById('clearOldScansBtn');
+        const purgeMissingFilesBtn = document.getElementById('purgeMissingFilesBtn');
+        const purgeOrphanedRecordsBtn = document.getElementById('purgeOrphanedRecordsBtn');
+
+        if (clearOldScansBtn) {
+            clearOldScansBtn.addEventListener('click', function() {
+                const oldScansAge = document.getElementById('oldScansAge').value;
+
+                if (confirm(`Are you sure you want to delete all scans older than ${oldScansAge} days?`)) {
+                    clearOldScansBtn.textContent = 'Clearing...';
+                    clearOldScansBtn.disabled = true;
+
+                    fetch('/api/db/clear_old_scans', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ days: parseInt(oldScansAge) })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (data.scans_deleted > 0) {
+                                alert(`Successfully deleted ${data.scans_deleted} scan(s) older than ${oldScansAge} days.`);
+                            } else {
+                                alert(`No scans found older than ${oldScansAge} days.`);
+                            }
+
+                            // Reload page to update stats
+                            window.location.reload();
+                        } else {
+                            alert('Error clearing old scans: ' + data.error);
+                            clearOldScansBtn.textContent = 'Clear Old Scans';
+                            clearOldScansBtn.disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error clearing old scans. Please try again.');
+
+                        clearOldScansBtn.textContent = 'Clear Old Scans';
+                        clearOldScansBtn.disabled = false;
+                    });
+                }
+            });
+        }
+
+        if (purgeMissingFilesBtn) {
+            purgeMissingFilesBtn.addEventListener('click', function() {
+                const missingFilesDaysSelect = document.getElementById('missingFilesDays');
+                if (!missingFilesDaysSelect) return;
+
+                const missingFilesDaysText = missingFilesDaysSelect.options[missingFilesDaysSelect.selectedIndex].text;
+                const days = parseInt(missingFilesDaysSelect.value);
+
+                if (confirm(`Are you sure you want to permanently delete files that have been ${missingFilesDaysText.toLowerCase()}?`)) {
+                    purgeMissingFilesBtn.textContent = 'Purging...';
+                    purgeMissingFilesBtn.disabled = true;
+
+                    fetch('/api/db/purge_missing_files', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ days: days })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (data.files_purged > 0) {
+                                alert(`Successfully purged ${data.files_purged} missing file(s).`);
+                            } else {
+                                alert(`No files found missing for more than ${days} days.`);
+                            }
+
+                            // Reload page to update stats
+                            window.location.reload();
+                        } else {
+                            alert('Error purging missing files: ' + data.error);
+                            purgeMissingFilesBtn.textContent = 'Purge Missing Files';
+                            purgeMissingFilesBtn.disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error purging missing files. Please try again.');
+
+                        purgeMissingFilesBtn.textContent = 'Purge Missing Files';
+                        purgeMissingFilesBtn.disabled = false;
+                    });
+                }
+            });
+        }
+
+        if (purgeOrphanedRecordsBtn) {
+            purgeOrphanedRecordsBtn.addEventListener('click', function() {
+                if (confirm('Are you sure you want to clean orphaned records? This will remove records that no longer have valid references.')) {
+                    purgeOrphanedRecordsBtn.textContent = 'Cleaning...';
+                    purgeOrphanedRecordsBtn.disabled = true;
+
+                    fetch('/api/db/purge_orphaned_records', {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const totalOrphaned = data.orphaned_checksums_removed + data.orphaned_errors_removed;
+                            if (totalOrphaned > 0) {
+                                alert(`Successfully cleaned ${totalOrphaned} orphaned record(s).`);
+                            } else {
+                                alert('No orphaned records found.');
+                            }
+                        } else {
+                            alert('Error cleaning orphaned records: ' + data.error);
+                        }
+
+                        purgeOrphanedRecordsBtn.textContent = 'Clean Orphaned Records';
+                        purgeOrphanedRecordsBtn.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error cleaning orphaned records. Please try again.');
+
+                        purgeOrphanedRecordsBtn.textContent = 'Clean Orphaned Records';
+                        purgeOrphanedRecordsBtn.disabled = false;
+                    });
+                }
+            });
+        }
+
+        // Backup management functions
+        const createBackupBtn = document.getElementById('createBackupBtn');
+        const saveBackupSettingsBtn = document.getElementById('saveBackupSettingsBtn');
+        const deleteBackupBtns = document.querySelectorAll('.delete-backup-btn');
+        const enableAutoBackups = document.getElementById('enableAutoBackups');
+        const backupOptionsRows = document.querySelectorAll('.backup-options .form-row');
+
+        if (createBackupBtn) {
+            createBackupBtn.addEventListener('click', function() {
+                const backupName = document.getElementById('backupName').value.trim();
+
+                createBackupBtn.textContent = 'Creating...';
+                createBackupBtn.disabled = true;
+
+                fetch('/api/db/backup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: backupName || undefined })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Backup created successfully.');
+                        // Reload page to show new backup
+                        window.location.reload();
+                    } else {
+                        alert('Error creating backup: ' + data.error);
+                        createBackupBtn.textContent = 'Create Backup';
+                        createBackupBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error creating backup. Please try again.');
+
+                    createBackupBtn.textContent = 'Create Backup';
+                    createBackupBtn.disabled = false;
+                });
+            });
+        }
+
+        if (enableAutoBackups && backupOptionsRows.length > 0) {
+            enableAutoBackups.addEventListener('change', function() {
+                const isEnabled = this.checked;
+
+                backupOptionsRows.forEach(row => {
+                    row.style.display = isEnabled ? 'flex' : 'none';
+                });
+            });
+
+            // Initialize visibility based on current state
+            const isEnabled = enableAutoBackups.checked;
+            backupOptionsRows.forEach(row => {
+                row.style.display = isEnabled ? 'flex' : 'none';
+            });
+        }
+
+        if (saveBackupSettingsBtn) {
+            saveBackupSettingsBtn.addEventListener('click', function() {
+                const enabled = enableAutoBackups.checked;
+                const frequency = document.getElementById('backupFrequency').value;
+                const retainCount = parseInt(document.getElementById('backupRetain').value);
+
+                // Validate inputs
+                if (isNaN(retainCount) || retainCount < 1 || retainCount > 100) {
+                    alert('Please enter a valid number of backups to keep (1-100).');
+                    return;
+                }
+
+                saveBackupSettingsBtn.textContent = 'Saving...';
+                saveBackupSettingsBtn.disabled = true;
+
+                fetch('/api/db/backup/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enabled: enabled,
+                        frequency: frequency,
+                        retain_count: retainCount
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Backup settings saved successfully.');
+                    } else {
+                        alert('Error saving backup settings: ' + data.error);
+                    }
+
+                    saveBackupSettingsBtn.textContent = 'Save Settings';
+                    saveBackupSettingsBtn.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error saving backup settings. Please try again.');
+
+                    saveBackupSettingsBtn.textContent = 'Save Settings';
+                    saveBackupSettingsBtn.disabled = false;
+                });
+            });
+        }
+
+        if (deleteBackupBtns.length > 0) {
+            deleteBackupBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const backupId = this.getAttribute('data-id');
+                    if (!backupId) return;
+
+                    const row = this.closest('tr');
+                    const backupName = row.cells[1].textContent.trim();
+
+                    if (confirm(`Are you sure you want to delete the backup "${backupName}"?`)) {
+                        btn.textContent = 'Deleting...';
+                        btn.disabled = true;
+
+                        fetch('/api/db/backup/' + backupId, {
+                            method: 'DELETE'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Remove row from table
+                                row.remove();
+                                alert('Backup deleted successfully.');
+                            } else {
+                                alert('Error deleting backup: ' + data.error);
+                                btn.textContent = 'Delete';
+                                btn.disabled = false;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error deleting backup. Please try again.');
+
+                            btn.textContent = 'Delete';
+                            btn.disabled = false;
+                        });
+                    }
+                });
+            });
+        }
+
+        // Advanced export buttons
+        const exportSchemaBtn = document.getElementById('exportSchemaBtn');
+        const exportAllDataBtn = document.getElementById('exportAllDataBtn');
+        const exportConfigBtn = document.getElementById('exportConfigBtn');
+
+        if (exportSchemaBtn) {
+            exportSchemaBtn.addEventListener('click', function() {
+                window.location.href = '/api/db/export/schema';
+            });
+        }
+
+        if (exportAllDataBtn) {
+            exportAllDataBtn.addEventListener('click', function() {
+                window.location.href = '/api/db/export/all_data';
+            });
+        }
+
+        if (exportConfigBtn) {
+            exportConfigBtn.addEventListener('click', function() {
+                window.location.href = '/api/db/export/configuration';
+            });
+        }
+
+        // Database repair button
+        const repairDatabaseBtn = document.getElementById('repairDatabaseBtn');
+
+        if (repairDatabaseBtn) {
+            repairDatabaseBtn.addEventListener('click', function() {
+                if (confirm('Are you sure you want to repair the database? This will create a backup and attempt to rebuild the database structure.')) {
+                    repairDatabaseBtn.textContent = 'Repairing...';
+                    repairDatabaseBtn.disabled = true;
+
+                    fetch('/api/db/repair', {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Database repair completed successfully.');
+                            // Reload page
+                            window.location.reload();
+                        } else {
+                            alert('Error repairing database: ' + data.error);
+                            repairDatabaseBtn.textContent = 'Repair Database';
+                            repairDatabaseBtn.disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error repairing database. Please try again.');
+
+                        repairDatabaseBtn.textContent = 'Repair Database';
+                        repairDatabaseBtn.disabled = false;
+                    });
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

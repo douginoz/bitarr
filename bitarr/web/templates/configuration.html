@@ -1,0 +1,256 @@
+{% extends 'layout.html' %}
+
+{% block title %}Bitarr - Configuration{% endblock %}
+
+{% block content %}
+<div class="configuration">
+    <h1>Configuration</h1>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Application Settings</h2>
+        </div>
+        <div class="card-body">
+            <form id="configForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="webUiPort">Web UI Port</label>
+                        <input type="number" id="webUiPort" name="web_ui_port" value="{{ config.web_ui_port|default(8286) }}" min="1024" max="65535">
+                        <div class="help-text">Port for the web interface (requires restart)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scanThreads">Scan Threads</label>
+                        <input type="number" id="scanThreads" name="scan_threads" value="{{ config.scan_threads|default(4) }}" min="1" max="32">
+                        <div class="help-text">Default number of threads for scanning</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="checksumMethod">Default Checksum Method</label>
+                        <select id="checksumMethod" name="checksum_method">
+                            {% for algorithm in algorithms %}
+                                <option value="{{ algorithm }}" {% if config.checksum_method == algorithm %}selected{% endif %}>{{ algorithm }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="help-text">Default method for calculating checksums</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="checksumBlockSize">Checksum Block Size (MB)</label>
+                        <input type="number" id="checksumBlockSize" name="checksum_block_size" value="{{ config.checksum_block_size|default(4) }}" min="1" max="64">
+                        <div class="help-text">Size of blocks read when calculating checksums</div>
+                    </div>
+                </div>
+
+                <h3>Database Settings</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="dbAutoVacuum">Auto Vacuum</label>
+                        <select id="dbAutoVacuum" name="db_auto_vacuum">
+                            <option value="0" {% if config.db_auto_vacuum == 0 %}selected{% endif %}>None</option>
+                            <option value="1" {% if config.db_auto_vacuum == 1 %}selected{% endif %}>Full</option>
+                            <option value="2" {% if config.db_auto_vacuum == 2 %}selected{% endif %}>Incremental</option>
+                        </select>
+                        <div class="help-text">Database auto-vacuum mode</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dbAutoBackup">Auto Backup</label>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="dbAutoBackup" name="db_auto_backup" {% if config.db_auto_backup %}checked{% endif %}>
+                            <label for="dbAutoBackup"></label>
+                        </div>
+                        <div class="help-text">Enable automatic database backups</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dbBackupFrequency">Backup Frequency</label>
+                        <select id="dbBackupFrequency" name="db_backup_frequency">
+                            <option value="daily" {% if config.db_backup_frequency == 'daily' %}selected{% endif %}>Daily</option>
+                            <option value="weekly" {% if config.db_backup_frequency == 'weekly' %}selected{% endif %}>Weekly</option>
+                            <option value="monthly" {% if config.db_backup_frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                        </select>
+                        <div class="help-text">How often to perform database backups</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dbBackupRetain">Backups to Retain</label>
+                        <input type="number" id="dbBackupRetain" name="db_backup_retain" value="{{ config.db_backup_retain|default(10) }}" min="1" max="100">
+                        <div class="help-text">Number of backup copies to keep</div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn primary">Save Configuration</button>
+                    <button type="button" id="resetConfigButton" class="btn outline">Reset to Defaults</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <div class="card-header">
+            <h2 class="card-title">Checksum Algorithms</h2>
+        </div>
+        <div class="card-body">
+            <div class="algorithm-cards">
+                {% for algorithm in algorithms %}
+                    {% if algo_info and algorithm in algo_info %}
+                        <div class="algorithm-card">
+                            <h3>{{ algorithm }}</h3>
+                            <div class="algorithm-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Description:</span>
+                                    <span class="detail-value">{{ algo_info[algorithm]['description'] }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Speed:</span>
+                                    <span class="detail-value">{{ algo_info[algorithm]['speed'] }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Security:</span>
+                                    <span class="detail-value">{{ algo_info[algorithm]['security'] }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Recommendation:</span>
+                                    <span class="detail-value">{{ algo_info[algorithm]['recommendation'] }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const configForm = document.getElementById('configForm');
+        const resetConfigButton = document.getElementById('resetConfigButton');
+
+        // Handle form submission
+        configForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = new FormData(configForm);
+            const config = {};
+
+            // Convert form data to config object
+            for (const [key, value] of formData.entries()) {
+                // Convert checkbox values
+                if (key === 'db_auto_backup') {
+                    config[key] = true;
+                } else if (key === 'checksum_method' || key === 'db_backup_frequency') {
+                    config[key] = value;
+                } else if (key.includes('_port') || key.includes('_threads') || key.includes('_retain') ||
+                        key.includes('_vacuum') || key.includes('_block_size')) {
+                    // Convert numeric values
+                    config[key] = parseInt(value, 10);
+                } else {
+                    config[key] = value;
+                }
+            }
+
+            // Check if db_auto_backup checkbox is unchecked
+            if (!formData.has('db_auto_backup')) {
+                config['db_auto_backup'] = false;
+            }
+
+            // Display saving indicator
+            const saveButton = configForm.querySelector('button[type="submit"]');
+            const originalText = saveButton.textContent;
+            saveButton.textContent = 'Saving...';
+            saveButton.disabled = true;
+
+            // Send to API
+            fetch('/api/configuration', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Highlight saved settings
+                    for (const key in config) {
+                        const element = document.getElementById(key.replace('_', ''));
+                        if (element) {
+                            element.classList.add('setting-changed');
+                            setTimeout(() => {
+                                element.classList.remove('setting-changed');
+                            }, 2000);
+                        }
+                    }
+                    // Show success message
+                    alert('Configuration saved successfully');
+                } else {
+                    alert('Error saving configuration: ' + data.error);
+                }
+
+                // Restore button
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error saving configuration. Please try again.');
+
+                // Restore button
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+            });
+        });
+
+        // Handle reset button
+        resetConfigButton.addEventListener('click', function() {
+            if (confirm('Reset all configuration to default values? This cannot be undone.')) {
+                // Show loading state
+                resetConfigButton.textContent = 'Resetting...';
+                resetConfigButton.disabled = true;
+
+                fetch('/api/configuration/reset', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Configuration reset to defaults');
+                        // Reload page to show new values
+                        location.reload();
+                    } else {
+                        alert('Error resetting configuration: ' + data.error);
+                        // Restore button
+                        resetConfigButton.textContent = 'Reset to Defaults';
+                        resetConfigButton.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error resetting configuration');
+                    // Restore button
+                    resetConfigButton.textContent = 'Reset to Defaults';
+                    resetConfigButton.disabled = false;
+                });
+            }
+        });
+
+        // Toggle dependencies
+        const dbAutoBackup = document.getElementById('dbAutoBackup');
+        const dbBackupFrequency = document.getElementById('dbBackupFrequency');
+        const dbBackupRetain = document.getElementById('dbBackupRetain');
+
+        function updateBackupControls() {
+            const isEnabled = dbAutoBackup.checked;
+            dbBackupFrequency.disabled = !isEnabled;
+            dbBackupRetain.disabled = !isEnabled;
+        }
+
+        dbAutoBackup.addEventListener('change', updateBackupControls);
+        updateBackupControls();
+    });
+</script>
+{% endblock %}

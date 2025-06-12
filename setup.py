@@ -9,7 +9,7 @@ setup(
         "Flask>=2.3.0,<3.0.0",
         "Flask-WTF>=1.1.0,<2.0.0",
         "Flask-SocketIO>=5.3.0,<6.0.0",
-        "SQLAlchemy>=2.0.0,<3.0.0", 
+        "SQLAlchemy>=2.0.0,<3.0.0",
         "xxhash>=3.3.0,<4.0.0",
         "blake3>=0.3.0,<1.0.0",
     ],

@@ -1,0 +1,924 @@
+{% extends 'layout.html' %}
+
+{% block title %}Bitarr - Scheduled Scans{% endblock %}
+
+{% block content %}
+<div class="scheduled-scans">
+    <h1>Scheduled Scans</h1>
+
+    <div class="sub-tabs">
+        <div class="sub-tab active" data-view="list">List View</div>
+        <div class="sub-tab" data-view="calendar">Calendar View</div>
+    </div>
+
+    <div class="controls">
+        <div class="search-container">
+            <input type="text" id="searchFilter" class="search-filter" placeholder="Filter scheduled scans...">
+        </div>
+        <div class="action-buttons">
+            {% if active_scans %}
+                <div class="notification-warning" style="margin: 0;">
+                    <span class="status-indicator status-running"></span> Scan in progress: {{ next(iter(active_scans.values())).get('path', 'Unknown') }}
+                </div>
+            {% endif %}
+            <button id="newScheduleBtn" class="btn primary">New Schedule</button>
+        </div>
+    </div>
+
+    <div class="view" id="list-view">
+        <div class="card">
+            <div class="card-body">
+                {% if schedules %}
+                    <div class="table-container">
+                        <table id="schedulesTable">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Name</th>
+                                    <th>Top-Level Path</th>
+                                    <th>Schedule</th>
+                                    <th>Next Run</th>
+                                    <th>Last Run</th>
+                                    <th>Last Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for schedule in schedules %}
+                                    <tr class="schedule-row" data-schedule-id="{{ schedule.id }}">
+                                        <td>
+                                            {% if schedule.is_active %}
+                                                {% if schedule.status == 'running' %}
+                                                    <span class="status-indicator status-running"></span> Running
+                                                {% else %}
+                                                    <span class="status-indicator status-good"></span> Active
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="status-indicator status-disabled"></span> Disabled
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ schedule.name }}</td>
+                                        <td class="path">
+                                            {% set paths = schedule.paths|from_json if schedule.paths else [] %}
+                                            {% if paths|length > 1 %}
+                                                {{ paths[0] }} <span class="badge">+{{ paths|length - 1 }}</span>
+                                            {% elif paths|length == 1 %}
+                                                {{ paths[0] }}
+                                            {% else %}
+                                                (No paths)
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ schedule.frequency|title }}{% if schedule.frequency == 'daily' %} (at {{ schedule.parameters|from_json|attr('hour', '00') }}:{{ schedule.parameters|from_json|attr('minute', '00')|string|zfill(2) }}){% endif %}</td>
+                                        <td class="time-ago" data-timestamp="{{ schedule.next_run }}">
+                                            {% if schedule.next_run %}
+                                                {{ schedule.next_run }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td class="time-ago" data-timestamp="{{ schedule.last_run }}">
+                                            {% if schedule.last_run %}
+                                                {{ schedule.last_run }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if schedule.last_run %}
+                                                {% if schedule.last_status == 'completed' %}
+                                                    <span class="badge badge-success">Completed</span>
+                                                {% elif schedule.last_status == 'failed' %}
+                                                    <span class="badge badge-danger">Failed</span>
+                                                {% elif schedule.last_status == 'partial' %}
+                                                    <span class="badge badge-warning">Partial</span>
+                                                {% else %}
+                                                    <span class="badge badge-secondary">{{ schedule.last_status|title }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge badge-secondary">Not run yet</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn small secondary edit-schedule-btn" data-schedule-id="{{ schedule.id }}">Edit</button>
+                                            {% if schedule.status == 'running' %}
+                                                <button class="btn small danger stop-scan-btn" data-scan-id="{{ schedule.current_scan_id }}">Stop</button>
+                                            {% else %}
+                                                <button class="btn small primary run-now-btn" data-schedule-id="{{ schedule.id }}">Run Now</button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🕒</div>
+                        <h3>No Scheduled Scans</h3>
+                        <p>You haven't created any scheduled scans yet. Schedule a scan to automate your file integrity monitoring.</p>
+                        <button id="firstScheduleBtn" class="btn primary">Create Your First Schedule</button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="view" id="calendar-view" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <div class="calendar-view">
+                    <div class="calendar-header">
+                        <div class="calendar-nav">
+                            <button id="prevMonthBtn" class="btn secondary">←</button>
+                        </div>
+                        <div class="calendar-title" id="currentMonth">{{ now.strftime('%B %Y') }}</div>
+                        <div class="calendar-nav">
+                            <button id="nextMonthBtn" class="btn secondary">→</button>
+                        </div>
+                    </div>
+
+                    <div class="calendar-grid" id="calendarGrid">
+                        <div class="calendar-day-header">Sun</div>
+                        <div class="calendar-day-header">Mon</div>
+                        <div class="calendar-day-header">Tue</div>
+                        <div class="calendar-day-header">Wed</div>
+                        <div class="calendar-day-header">Thu</div>
+                        <div class="calendar-day-header">Fri</div>
+                        <div class="calendar-day-header">Sat</div>
+
+                        <!-- Calendar days will be populated via JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="notification notification-info">
+        <div>Scheduled scans that would overlap with running scans will be queued and start when resources are available.</div>
+    </div>
+</div>
+
+<!-- New/Edit Schedule Modal -->
+<div id="scheduleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title" id="scheduleModalTitle">New Scheduled Scan</h3>
+            <button class="close-button">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="scheduleForm">
+                <input type="hidden" id="scheduleId" name="id" value="">
+
+                <div class="form-group">
+                    <div class="form-row">
+                        <div class="form-label">Name</div>
+                        <div class="form-input">
+                            <input type="text" id="scheduleName" name="name" placeholder="Give this schedule a descriptive name" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Status</div>
+                        <div class="form-input">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="scheduleActive" name="is_active" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span style="margin-left: 10px;">Active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h4>Top-Level Paths</h4>
+                <div class="path-list" id="pathList">
+                    <!-- Paths will be populated dynamically -->
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group" style="width: 100%;">
+                        <input type="text" id="newPath" placeholder="Add new path..." class="monospace" style="flex: 1;">
+                        <button type="button" id="addPathBtn" class="btn secondary">Add</button>
+                    </div>
+                </div>
+
+                <h4>Schedule Settings</h4>
+
+                <div class="form-row">
+                    <div class="form-label">Frequency</div>
+                    <div class="form-input">
+                        <div class="radios">
+                            <div class="radio-option">
+                                <input type="radio" id="freqDaily" name="frequency" value="daily">
+                                <label for="freqDaily">Daily</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="freqWeekly" name="frequency" value="weekly">
+                                <label for="freqWeekly">Weekly</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="freqMonthly" name="frequency" value="monthly" checked>
+                                <label for="freqMonthly">Monthly</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="freqQuarterly" name="frequency" value="quarterly">
+                                <label for="freqQuarterly">Quarterly</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="freqCustom" name="frequency" value="custom">
+                                <label for="freqCustom">Custom</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily options -->
+                <div class="schedule-option" id="dailyOptions" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-label">Start time</div>
+                        <div class="form-input">
+                            <select id="dailyHour" name="daily_hour">
+                                {% for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>
+                                {% endfor %}
+                            </select>
+                            <div class="help-text">Choose a time when system usage is typically low.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Weekly options -->
+                <div class="schedule-option" id="weeklyOptions" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-label">Day of week</div>
+                        <div class="form-input">
+                            <select id="weeklyDay" name="weekly_day">
+                                <option value="0">Monday</option>
+                                <option value="1">Tuesday</option>
+                                <option value="2">Wednesday</option>
+                                <option value="3">Thursday</option>
+                                <option value="4">Friday</option>
+                                <option value="5">Saturday</option>
+                                <option value="6">Sunday</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Start time</div>
+                        <div class="form-input">
+                            <select id="weeklyHour" name="weekly_hour">
+                                {% for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly options -->
+                <div class="schedule-option" id="monthlyOptions">
+                    <div class="form-row">
+                        <div class="form-label">Day of month</div>
+                        <div class="form-input">
+                            <select id="monthlyDay" name="monthly_day">
+                                <option value="1">1st of month</option>
+                                <option value="15">15th of month</option>
+                                <option value="last">Last day of month</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Start time</div>
+                        <div class="form-input">
+                            <select id="monthlyHour" name="monthly_hour">
+                                {% for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quarterly options -->
+                <div class="schedule-option" id="quarterlyOptions" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-label">Day of quarter</div>
+                        <div class="form-input">
+                            <select id="quarterlyDay" name="quarterly_day">
+                                <option value="1">1st day of quarter</option>
+                                <option value="15">15th day of quarter</option>
+                                <option value="last">Last day of quarter</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Start time</div>
+                        <div class="form-input">
+                            <select id="quarterlyHour" name="quarterly_hour">
+                                {% for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom options -->
+                <div class="schedule-option" id="customOptions" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-label">Interval</div>
+                        <div class="form-input">
+                            <input type="number" id="customInterval" name="custom_interval" value="7" min="1" max="365">
+                            <select id="customUnit" name="custom_unit">
+                                <option value="days">days</option>
+                                <option value="weeks">weeks</option>
+                                <option value="months">months</option>
+                                <option value="years">years</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Start time</div>
+                        <div class="form-input">
+                            <select id="customHour" name="custom_hour">
+                                {% for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d'|format(hour) }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <h4>Advanced Options</h4>
+
+                <div class="form-row">
+                    <div class="form-label">Max Runtime</div>
+                    <div class="form-input">
+                        <input type="number" id="maxRuntime" name="max_runtime" value="12" style="width: 80px;">
+                        <span style="margin-left: 5px;">hours</span>
+                        <div class="help-text">Maximum duration for this scan. 0 = unlimited.</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Priority</div>
+                    <div class="form-input">
+                        <select id="priority" name="priority">
+                            <option value="0">Low (yield to other scans)</option>
+                            <option value="1" selected>Normal</option>
+                            <option value="2">High (take precedence)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Checksum Method</div>
+                    <div class="form-input">
+                        <select id="checksumMethod" name="checksum_method">
+                            <option value="sha256">SHA-256 (Recommended)</option>
+                            <option value="sha512">SHA-512 (More Secure)</option>
+                            <option value="blake3">BLAKE3 (Fast & Secure)</option>
+                            <option value="xxhash64">xxHash64 (Fastest)</option>
+                            <option value="md5">MD5 (Legacy)</option>
+                            <option value="sha1">SHA-1 (Legacy)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Scan Threads</div>
+                    <div class="form-input">
+                        <input type="number" id="scanThreads" name="scan_threads" value="4" min="1" max="32">
+                        <div class="help-text">Number of parallel threads to use for scanning.</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Exclude Directories</div>
+                    <div class="form-input">
+                        <input type="text" id="excludeDirs" name="exclude_dirs" placeholder=".git, node_modules, .venv">
+                        <div class="help-text">Comma-separated list of directory names to exclude.</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-label">Notifications</div>
+                    <div class="form-input">
+                        <div>
+                            <input type="checkbox" id="notifyComplete" name="notify_complete" checked>
+                            <label for="notifyComplete">On completion</label>
+                        </div>
+                        <div>
+                            <input type="checkbox" id="notifyErrors" name="notify_errors" checked>
+                            <label for="notifyErrors">On errors only</label>
+                        </div>
+                        <div class="help-text">Notification functionality will be available in a future update.</div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn secondary close-modal">Cancel</button>
+                    <button type="submit" class="btn primary">Save Schedule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Sub-tabs handling
+        const subTabs = document.querySelectorAll('.sub-tab');
+        const views = document.querySelectorAll('.view');
+
+        subTabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                subTabs.forEach(t => t.classList.remove('active'));
+
+                // Add active class to clicked tab
+                this.classList.add('active');
+
+                // Hide all views
+                views.forEach(view => view.style.display = 'none');
+
+                // Show the selected view
+                const viewId = this.dataset.view + '-view';
+                document.getElementById(viewId).style.display = 'block';
+
+                // If calendar view, initialize calendar
+                if (this.dataset.view === 'calendar') {
+                    initializeCalendar();
+                }
+            });
+        });
+
+        // Handle search filter
+        const searchFilter = document.getElementById('searchFilter');
+        const schedulesTable = document.getElementById('schedulesTable');
+
+        if (searchFilter && schedulesTable) {
+            searchFilter.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                const tableRows = schedulesTable.querySelectorAll('tbody tr');
+
+                tableRows.forEach(row => {
+                    const name = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+                    const path = row.querySelector('.path').textContent.toLowerCase();
+
+                    if (name.includes(searchTerm) || path.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        // New Schedule button
+        const newScheduleBtn = document.getElementById('newScheduleBtn');
+        const firstScheduleBtn = document.getElementById('firstScheduleBtn');
+        const scheduleModal = document.getElementById('scheduleModal');
+        const scheduleForm = document.getElementById('scheduleForm');
+        const closeModalButtons = document.querySelectorAll('.close-modal, .close-button');
+
+        function openScheduleModal(isEdit = false, scheduleId = null) {
+            // Reset form
+            scheduleForm.reset();
+
+            // Clear path list
+            const pathList = document.getElementById('pathList');
+            pathList.innerHTML = '';
+
+            // Update modal title
+            const modalTitle = document.getElementById('scheduleModalTitle');
+            modalTitle.textContent = isEdit ? 'Edit Scheduled Scan' : 'New Scheduled Scan';
+
+            // Set schedule ID if editing
+            const scheduleIdInput = document.getElementById('scheduleId');
+            scheduleIdInput.value = scheduleId || '';
+
+            // If editing, populate form with schedule data
+            if (isEdit && scheduleId) {
+                // In a real implementation, this would fetch the schedule data from the server
+                // For now, we'll use dummy data
+                const dummySchedule = {
+                    id: scheduleId,
+                    name: 'Development Projects',
+                    is_active: true,
+                    paths: ['/home/user/projects', '/home/user/documents'],
+                    frequency: 'monthly',
+                    parameters: {
+                        day_of_month: '1',
+                        hour: '3',
+                        minute: '0'
+                    },
+                    max_runtime: 12,
+                    priority: 1,
+                    checksum_method: 'sha256',
+                    scan_threads: 4,
+                    exclude_dirs: '.git, node_modules, .venv',
+                    notify_complete: true,
+                    notify_errors: true
+                };
+
+                // Populate form fields
+                document.getElementById('scheduleName').value = dummySchedule.name;
+                document.getElementById('scheduleActive').checked = dummySchedule.is_active;
+
+                // Add paths
+                dummySchedule.paths.forEach(path => {
+                    addPath(path);
+                });
+
+                // Set frequency
+                document.querySelector(`input[name="frequency"][value="${dummySchedule.frequency}"]`).checked = true;
+                updateScheduleOptions();
+
+                // Set other fields based on frequency
+                if (dummySchedule.frequency === 'daily') {
+                    document.getElementById('dailyHour').value = dummySchedule.parameters.hour;
+                } else if (dummySchedule.frequency === 'weekly') {
+                    document.getElementById('weeklyDay').value = dummySchedule.parameters.day_of_week;
+                    document.getElementById('weeklyHour').value = dummySchedule.parameters.hour;
+                } else if (dummySchedule.frequency === 'monthly') {
+                    document.getElementById('monthlyDay').value = dummySchedule.parameters.day_of_month;
+                    document.getElementById('monthlyHour').value = dummySchedule.parameters.hour;
+                } else if (dummySchedule.frequency === 'quarterly') {
+                    document.getElementById('quarterlyDay').value = dummySchedule.parameters.day_of_quarter;
+                    document.getElementById('quarterlyHour').value = dummySchedule.parameters.hour;
+                } else if (dummySchedule.frequency === 'custom') {
+                    document.getElementById('customInterval').value = dummySchedule.parameters.interval;
+                    document.getElementById('customUnit').value = dummySchedule.parameters.unit;
+                    document.getElementById('customHour').value = dummySchedule.parameters.hour;
+                }
+
+                // Set advanced options
+                document.getElementById('maxRuntime').value = dummySchedule.max_runtime;
+                document.getElementById('priority').value = dummySchedule.priority;
+                document.getElementById('checksumMethod').value = dummySchedule.checksum_method;
+                document.getElementById('scanThreads').value = dummySchedule.scan_threads;
+                document.getElementById('excludeDirs').value = dummySchedule.exclude_dirs;
+                document.getElementById('notifyComplete').checked = dummySchedule.notify_complete;
+                document.getElementById('notifyErrors').checked = dummySchedule.notify_errors;
+            }
+
+            // Open modal
+            scheduleModal.style.display = 'flex';
+        }
+
+        // New Schedule button click
+        if (newScheduleBtn) {
+            newScheduleBtn.addEventListener('click', function() {
+                openScheduleModal();
+            });
+        }
+
+        // First Schedule button click
+        if (firstScheduleBtn) {
+            firstScheduleBtn.addEventListener('click', function() {
+                openScheduleModal();
+            });
+        }
+
+        // Edit Schedule button click
+        const editScheduleButtons = document.querySelectorAll('.edit-schedule-btn');
+
+        editScheduleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const scheduleId = this.dataset.scheduleId;
+                openScheduleModal(true, scheduleId);
+            });
+        });
+
+        // Run Now button click
+        const runNowButtons = document.querySelectorAll('.run-now-btn');
+
+        runNowButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const scheduleId = this.dataset.scheduleId;
+
+                // In a real implementation, this would send a request to the server
+                alert(`Schedule ${scheduleId} will be run now.`);
+            });
+        });
+
+        // Stop Scan button click
+        const stopScanButtons = document.querySelectorAll('.stop-scan-btn');
+
+        stopScanButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const scanId = this.dataset.scanId;
+
+                // In a real implementation, this would send a request to the server
+                alert(`Scan ${scanId} will be stopped.`);
+            });
+        });
+
+        // Close modal buttons
+        closeModalButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                scheduleModal.style.display = 'none';
+            });
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            if (event.target === scheduleModal) {
+                scheduleModal.style.display = 'none';
+            }
+        });
+
+        // Add path button
+        const addPathBtn = document.getElementById('addPathBtn');
+        const newPathInput = document.getElementById('newPath');
+
+        if (addPathBtn && newPathInput) {
+            addPathBtn.addEventListener('click', function() {
+                const path = newPathInput.value.trim();
+
+                if (path) {
+                    addPath(path);
+                    newPathInput.value = '';
+                }
+            });
+
+            // Also add path on Enter key
+            newPathInput.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addPathBtn.click();
+                }
+            });
+        }
+
+        // Function to add a path to the list
+        function addPath(path) {
+            const pathList = document.getElementById('pathList');
+
+            const pathItem = document.createElement('div');
+            pathItem.className = 'path-item';
+            pathItem.dataset.path = path;
+
+            const pathText = document.createElement('div');
+            pathText.className = 'path-text';
+            pathText.textContent = path;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn secondary';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', function() {
+                pathItem.remove();
+            });
+
+            pathItem.appendChild(pathText);
+            pathItem.appendChild(removeBtn);
+
+            pathList.appendChild(pathItem);
+        }
+
+        // Handle frequency radio buttons
+        const frequencyRadios = document.querySelectorAll('input[name="frequency"]');
+
+        frequencyRadios.forEach(radio => {
+            radio.addEventListener('change', updateScheduleOptions);
+        });
+
+        // Update schedule options based on selected frequency
+        function updateScheduleOptions() {
+            const selectedFrequency = document.querySelector('input[name="frequency"]:checked').value;
+
+            // Hide all schedule options
+            document.getElementById('dailyOptions').style.display = 'none';
+            document.getElementById('weeklyOptions').style.display = 'none';
+            document.getElementById('monthlyOptions').style.display = 'none';
+            document.getElementById('quarterlyOptions').style.display = 'none';
+            document.getElementById('customOptions').style.display = 'none';
+
+            // Show selected schedule options
+            if (selectedFrequency === 'daily') {
+                document.getElementById('dailyOptions').style.display = 'block';
+            } else if (selectedFrequency === 'weekly') {
+                document.getElementById('weeklyOptions').style.display = 'block';
+            } else if (selectedFrequency === 'monthly') {
+                document.getElementById('monthlyOptions').style.display = 'block';
+            } else if (selectedFrequency === 'quarterly') {
+                document.getElementById('quarterlyOptions').style.display = 'block';
+            } else if (selectedFrequency === 'custom') {
+                document.getElementById('customOptions').style.display = 'block';
+            }
+        }
+
+        // Initialize schedule options on page load
+        updateScheduleOptions();
+
+        // Form submission
+        if (scheduleForm) {
+            scheduleForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                // Validate form
+                const scheduleName = document.getElementById('scheduleName').value.trim();
+                const pathList = document.getElementById('pathList');
+                const paths = Array.from(pathList.children).map(item => item.dataset.path);
+
+                if (!scheduleName) {
+                    alert('Please enter a name for the schedule.');
+                    return;
+                }
+
+                if (paths.length === 0) {
+                    alert('Please add at least one path to scan.');
+                    return;
+                }
+
+                // Get form data
+                const formData = new FormData(this);
+
+                // Get frequency parameters
+                const frequency = formData.get('frequency');
+                let parameters = {};
+
+                if (frequency === 'daily') {
+                    parameters = {
+                        hour: formData.get('daily_hour'),
+                        minute: 0
+                    };
+                } else if (frequency === 'weekly') {
+                    parameters = {
+                        day_of_week: formData.get('weekly_day'),
+                        hour: formData.get('weekly_hour'),
+                        minute: 0
+                    };
+                } else if (frequency === 'monthly') {
+                    parameters = {
+                        day_of_month: formData.get('monthly_day'),
+                        hour: formData.get('monthly_hour'),
+                        minute: 0
+                    };
+                } else if (frequency === 'quarterly') {
+                    parameters = {
+                        day_of_quarter: formData.get('quarterly_day'),
+                        hour: formData.get('quarterly_hour'),
+                        minute: 0
+                    };
+                } else if (frequency === 'custom') {
+                    parameters = {
+                        interval: formData.get('custom_interval'),
+                        unit: formData.get('custom_unit'),
+                        hour: formData.get('custom_hour'),
+                        minute: 0
+                    };
+                }
+
+                // Create schedule data
+                const scheduleData = {
+                    id: formData.get('id'),
+                    name: scheduleName,
+                    is_active: formData.get('is_active') === 'on',
+                    paths: paths,
+                    frequency: frequency,
+                    parameters: parameters,
+                    max_runtime: parseInt(formData.get('max_runtime')),
+                    priority: parseInt(formData.get('priority')),
+                    checksum_method: formData.get('checksum_method'),
+                    scan_threads: parseInt(formData.get('scan_threads')),
+                    exclude_dirs: formData.get('exclude_dirs'),
+                    notify_complete: formData.get('notify_complete') === 'on',
+                    notify_errors: formData.get('notify_errors') === 'on'
+                };
+
+                // In a real implementation, this would send a request to the server
+                console.log('Saving schedule:', scheduleData);
+
+                // Close modal
+                scheduleModal.style.display = 'none';
+
+                // Show success message
+                alert('Schedule saved successfully!');
+
+                // Reload page
+                // window.location.reload();
+            });
+        }
+
+        // Calendar view
+        let currentDate = new Date({{ now.year }}, {{ now.month - 1 }}, 1);
+        const calendarGrid = document.getElementById('calendarGrid');
+        const currentMonthElement = document.getElementById('currentMonth');
+        const prevMonthBtn = document.getElementById('prevMonthBtn');
+        const nextMonthBtn = document.getElementById('nextMonthBtn');
+
+        // Initialize calendar
+        function initializeCalendar() {
+            if (!calendarGrid) return;
+
+            // Clear existing calendar days
+            const existingDays = calendarGrid.querySelectorAll('.calendar-day:not(.calendar-day-header)');
+            existingDays.forEach(day => day.remove());
+
+            // Update month title
+            if (currentMonthElement) {
+                currentMonthElement.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+            }
+
+            // Get first day of month and number of days in month
+            const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+            const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+
+            // Add empty cells for days before first day of month
+            for (let i = 0; i < firstDay; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'calendar-day';
+                calendarGrid.appendChild(emptyDay);
+            }
+
+            // Create calendar days
+            for (let day = 1; day <= daysInMonth; day++) {
+                const calendarDay = document.createElement('div');
+                calendarDay.className = 'calendar-day';
+
+                // Add day number
+                const dayNumber = document.createElement('div');
+                dayNumber.className = 'calendar-day-number';
+                dayNumber.textContent = day;
+
+                // Check if this is today
+                const today = new Date();
+                if (currentDate.getFullYear() === today.getFullYear() &&
+                    currentDate.getMonth() === today.getMonth() &&
+                    day === today.getDate()) {
+                    calendarDay.classList.add('today');
+                }
+
+                calendarDay.appendChild(dayNumber);
+
+                // Add scheduled scans for this day
+                addScheduledScansToDay(calendarDay, day, currentDate.getMonth(), currentDate.getFullYear());
+
+                calendarGrid.appendChild(calendarDay);
+            }
+        }
+
+        // Add scheduled scans to a calendar day
+        function addScheduledScansToDay(dayElement, day, month, year) {
+            // Format date as YYYY-MM-DD for comparison
+            const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+            // Get scheduled scans from the page data
+            const schedules = Array.from(document.querySelectorAll('.schedule-row'));
+
+            // Find schedules for this day
+            schedules.forEach(schedule => {
+                const nextRunElement = schedule.querySelector('td:nth-child(5)');
+                if (!nextRunElement) return;
+
+                const nextRunDate = nextRunElement.getAttribute('data-timestamp');
+                if (!nextRunDate) return;
+
+                // If this schedule runs on the current day, add it to the calendar
+                if (nextRunDate.includes(formattedDate)) {
+                    const scheduleName = schedule.querySelector('td:nth-child(2)').textContent;
+                    const scheduleId = schedule.getAttribute('data-schedule-id');
+                    const scheduleStatus = schedule.querySelector('td:first-child').textContent.trim();
+
+                    const scheduleEvent = document.createElement('div');
+                    scheduleEvent.className = `calendar-event ${scheduleStatus === 'Running' ? 'type-1' : scheduleStatus === 'Active' ? 'type-2' : 'type-3'}`;
+                    scheduleEvent.textContent = scheduleName;
+                    scheduleEvent.dataset.scheduleId = scheduleId;
+
+                    scheduleEvent.addEventListener('click', function() {
+                        // Open the edit modal for this schedule
+                        document.querySelector(`.edit-schedule-btn[data-schedule-id="${scheduleId}"]`).click();
+                    });
+
+                    dayElement.appendChild(scheduleEvent);
+                }
+            });
+        }
+
+        // Initialize calendar navigation
+        if (prevMonthBtn && nextMonthBtn) {
+            prevMonthBtn.addEventListener('click', function() {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                initializeCalendar();
+            });
+
+            nextMonthBtn.addEventListener('click', function() {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                initializeCalendar();
+            });
+        }
+
+        // Initialize calendar on page load if calendar view is active
+        if (document.querySelector('.sub-tab[data-view="calendar"]')?.classList.contains('active')) {
+            initializeCalendar();
+        }
+    });
+</script>
+{% endblock %}

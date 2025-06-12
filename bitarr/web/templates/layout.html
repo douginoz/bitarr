@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Bitarr{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-left">
+                <button id="menuToggle" class="menu-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <h1 class="app-title">Bitarr</h1>
+            </div>
+            <div class="header-right">
+                <button id="newScanButton" class="btn primary">New Scan</button>
+            </div>
+        </header>
+
+        <div class="app-body">
+            <nav class="app-nav">
+                <ul>
+                    <li {% if request.path == url_for('routes.index') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.index') }}">
+                            <span class="icon">🏠</span>
+                            <span class="text">Dashboard</span>
+                        </a>
+                    </li>
+                    <li {% if request.path == url_for('routes.scan_history') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.scan_history') }}">
+                            <span class="icon">📋</span>
+                            <span class="text">Scan History</span>
+                        </a>
+                    </li>
+                    <li {% if request.path == url_for('routes.storage_health') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.storage_health') }}">
+                            <span class="icon">💾</span>
+                            <span class="text">Storage Health</span>
+                        </a>
+                    </li>
+                    <li {% if request.path == url_for('routes.scheduled_scans') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.scheduled_scans') }}">
+                            <span class="icon">🕒</span>
+                            <span class="text">Scheduled Scans</span>
+                        </a>
+                    </li>
+                    <li {% if request.path == url_for('routes.configuration') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.configuration') }}">
+                            <span class="icon">⚙️</span>
+                            <span class="text">Configuration</span>
+                        </a>
+                    </li>
+                    <li {% if request.path == url_for('routes.database_management') %}class="active"{% endif %}>
+                        <a href="{{ url_for('routes.database_management') }}">
+                            <span class="icon">🗄️</span>
+                            <span class="text">Database</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <main class="app-main">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-messages">
+                            {% for category, message in messages %}
+                                <div class="flash-message {{ category }}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                <div class="content">
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+
+        <footer class="app-footer">
+            <p>&copy; 2025 Bitarr - File Integrity Scanner</p>
+        </footer>
+    </div>
+
+    <!-- New Scan Modal -->
+    <div id="newScanModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>New Scan</h2>
+                <button class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="newScanForm">
+                    <div class="form-group">
+                        <label for="scanPath">Path to Scan</label>
+                        <div class="input-with-button">
+                            <input type="text" id="scanPath" name="path" required>
+                            <button type="button" id="browsePath" class="btn secondary">Browse</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scanName">Scan Name (Optional)</label>
+                        <input type="text" id="scanName" name="name" placeholder="Scan of [path]">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="checksumMethod">Checksum Method</label>
+                        <select id="checksumMethod" name="checksum_method">
+                            <option value="sha256">SHA-256 (Recommended)</option>
+                            <option value="sha512">SHA-512 (More Secure)</option>
+                            <option value="blake3">BLAKE3 (Fast & Secure)</option>
+                            <option value="xxhash64">xxHash64 (Fastest)</option>
+                            <option value="md5">MD5 (Legacy)</option>
+                            <option value="sha1">SHA-1 (Legacy)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scanThreads">Threads</label>
+                        <input type="number" id="scanThreads" name="threads" value="4" min="1" max="32">
+                        <div class="help-text">Number of parallel threads to use for scanning.</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="excludeDirs">Exclude Directories (Optional)</label>
+                        <input type="text" id="excludeDirs" name="exclude_dirs" placeholder=".git, node_modules, .venv">
+                        <div class="help-text">Comma-separated list of directory names to exclude.</div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn secondary close-modal">Cancel</button>
+                        <button type="submit" class="btn primary">Start Scan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Scan Modal -->
+    <div id="activeScanModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Scan in Progress</h2>
+                <button class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="scanProgress">
+                    <div class="progress-info">
+                        <span id="scanStatus">Initializing...</span>
+                        <span id="scanPercentage">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-details">
+                        <div id="scanCurrentFile" class="scan-current-file">Preparing to scan...</div>
+                        <div id="scanFileCount" class="scan-file-count">0 / 0 files</div>
+                    </div>
+                </div>
+
+                <div class="scan-actions">
+                    <button id="stopScanButton" class="btn danger">Stop Scan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Navigation menu toggle
+        const menuToggle = document.getElementById('menuToggle');
+        const appNav = document.querySelector('.app-nav');
+
+        if (menuToggle && appNav) {
+            menuToggle.addEventListener('click', function() {
+                appNav.classList.toggle('expanded');
+            });
+        }
+
+        // Modal handling
+        const openModalButtons = document.querySelectorAll('[data-open-modal]');
+        const closeModalButtons = document.querySelectorAll('.close-modal, .close-button');
+        const modals = document.querySelectorAll('.modal');
+
+        // Open modal buttons
+        openModalButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const modalId = this.dataset.openModal;
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'flex';
+                }
+            });
+        });
+
+        // Close modal buttons
+        closeModalButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const modal = this.closest('.modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+
+        // New scan button
+        const newScanButton = document.getElementById('newScanButton');
+        const newScanModal = document.getElementById('newScanModal');
+
+        if (newScanButton && newScanModal) {
+            newScanButton.addEventListener('click', function() {
+                newScanModal.style.display = 'flex';
+            });
+        }
+
+        // New scan form submission
+        const newScanForm = document.getElementById('newScanForm');
+        if (newScanForm) {
+            newScanForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                // Get form data
+                const path = document.getElementById('scanPath').value;
+                const name = document.getElementById('scanName').value;
+                const algorithm = document.getElementById('checksumMethod').value;
+                const threads = document.getElementById('scanThreads').value;
+                const excludeDirs = document.getElementById('excludeDirs').value;
+
+                // Validate path
+                if (!path) {
+                    alert('Please enter a path to scan');
+                    return;
+                }
+
+                // Show loading state
+                const submitButton = newScanForm.querySelector('button[type="submit"]');
+                submitButton.textContent = 'Starting...';
+                submitButton.disabled = true;
+
+                // Prepare data for API
+                const scanData = {
+                    path: path,
+                    name: name || undefined,
+                    algorithm: algorithm,
+                    threads: parseInt(threads, 10),
+                    exclude_dirs: excludeDirs || undefined
+                };
+
+                // Send to API
+                fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(scanData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Close the modal
+                        newScanModal.style.display = 'none';
+
+                        // Show active scan modal
+                        const activeScanModal = document.getElementById('activeScanModal');
+                        if (activeScanModal) {
+                            activeScanModal.style.display = 'flex';
+
+                            // Initialize scan progress updates via Socket.IO
+                            initializeScanProgress(data.scan_id);
+                        } else {
+                            // If active scan modal doesn't exist, redirect to scan details
+                            alert('Scan started successfully');
+                            window.location.href = '/scan_details/' + data.scan_id;
+                        }
+                    } else {
+                        alert('Error starting scan: ' + data.error);
+
+                        // Restore button
+                        submitButton.textContent = 'Start Scan';
+                        submitButton.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error starting scan. Please try again.');
+
+                    // Restore button
+                    submitButton.textContent = 'Start Scan';
+                    submitButton.disabled = false;
+                });
+            });
+        }
+
+        // Initialize Socket.IO for scan progress
+        function initializeScanProgress(scanId) {
+            if (typeof io === 'undefined') {
+                console.error('Socket.IO not loaded');
+                return;
+            }
+
+            const socket = io();
+
+            // Elements for progress updates
+            const scanStatus = document.getElementById('scanStatus');
+            const scanPercentage = document.getElementById('scanPercentage');
+            const scanCurrentFile = document.getElementById('scanCurrentFile');
+            const scanFileCount = document.getElementById('scanFileCount');
+            const progressFill = document.querySelector('.progress-fill');
+
+            // Listen for scan progress events
+            socket.on('scan_progress', function(data) {
+                if (data.scan_id !== scanId) return;
+
+                // Update progress display
+                if (scanStatus) scanStatus.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                if (scanPercentage) scanPercentage.textContent = `${data.percent_complete.toFixed(1)}%`;
+                if (scanCurrentFile) scanCurrentFile.textContent = data.current_path || 'Processing...';
+                if (scanFileCount) scanFileCount.textContent = `${data.files_processed} / ${data.total_files} files`;
+                if (progressFill) progressFill.style.width = `${data.percent_complete}%`;
+
+                // If scan completed or failed, handle completion
+                if (data.status === 'completed' || data.status === 'failed') {
+                    // Close active scan modal after short delay
+                    setTimeout(function() {
+                        const activeScanModal = document.getElementById('activeScanModal');
+                        if (activeScanModal) {
+                            activeScanModal.style.display = 'none';
+                        }
+
+                        // Redirect to scan details
+                        window.location.href = '/scan_details/' + scanId;
+                    }, 1000);
+                }
+            });
+
+            // Handle scan completion event
+            socket.on('scan_complete', function(data) {
+                console.log('DEBUG: Scan complete received:', data);
+                console.log('DEBUG: Current scanId:', scanId);
+                console.log('DEBUG: data.temp_scan_id:', data.temp_scan_id);
+                console.log('DEBUG: Types - scanId:', typeof scanId, 'temp_scan_id:', typeof data.temp_scan_id);
+
+                // Check if this completion event is for our scan
+                if (data.temp_scan_id !== scanId) {
+                    console.log('DEBUG: Ignoring - not our scan (temp_scan_id mismatch)');
+                    return;
+                }
+
+                console.log('DEBUG: Processing our scan completion - IDs match!');
+
+                // CRITICAL: Remove all event listeners to prevent infinite loops
+                socket.off('scan_progress');
+                socket.off('scan_complete');
+                socket.off('scan_error');
+                console.log('DEBUG: Removed all socket event listeners');
+
+                // Close the active scan modal
+                const activeScanModal = document.getElementById('activeScanModal');
+                if (activeScanModal) {
+                    activeScanModal.style.display = 'none';
+                    console.log('DEBUG: Closed active scan modal');
+                }
+
+                // Use the ACTUAL scan_id for redirect, not the temp one
+                if (data.scan_id && !data.scan_id.toString().startsWith('temp_')) {
+                    console.log('DEBUG: Valid scan_id found:', data.scan_id);
+                    console.log('DEBUG: Redirecting to /scan_details/' + data.scan_id);
+
+                    // Add a small delay before redirect to ensure cleanup completes
+                    setTimeout(function() {
+                        window.location.href = '/scan_details/' + data.scan_id;
+                    }, 100);
+                } else {
+                    console.log('DEBUG: No valid scan_id found, data.scan_id:', data.scan_id);
+                    alert('Scan completed successfully!');
+                    window.location.reload();
+                }
+            });
+
+            // Handle stop scan button
+            const stopScanButton = document.getElementById('stopScanButton');
+            if (stopScanButton) {
+                stopScanButton.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to stop the current scan?')) {
+                        // Show loading state
+                        stopScanButton.textContent = 'Stopping...';
+                        stopScanButton.disabled = true;
+
+                        // Send stop request to API
+                        fetch(`/api/scan/stop/${scanId}`, {
+                            method: 'POST'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Close the modal
+                                const activeScanModal = document.getElementById('activeScanModal');
+                                if (activeScanModal) {
+                                    activeScanModal.style.display = 'none';
+                                }
+
+                                alert('Scan stopped successfully');
+                            } else {
+                                alert('Error stopping scan: ' + data.error);
+
+                                // Restore button
+                                stopScanButton.textContent = 'Stop Scan';
+                                stopScanButton.disabled = false;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error stopping scan');
+
+                            // Restore button
+                            stopScanButton.textContent = 'Stop Scan';
+                            stopScanButton.disabled = false;
+                        });
+                    }
+                });
+            }
+        }
+
+        // Browse button for scan path
+        const browsePath = document.getElementById('browsePath');
+        const scanPath = document.getElementById('scanPath');
+
+        if (browsePath && scanPath) {
+            browsePath.addEventListener('click', function() {
+                // In a real implementation, this would open a file dialog
+                // For now, just show a message
+                alert('File dialog would open here in a desktop application. For web-based usage, enter the path manually.');
+            });
+        }
+
+        // Time ago formatting for timestamps
+        const timeAgoElements = document.querySelectorAll('.time-ago');
+
+        timeAgoElements.forEach(element => {
+            const timestamp = element.dataset.timestamp;
+            if (!timestamp) return;
+
+            try {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diff = now - date;
+
+                let formattedDate;
+
+                if (diff < 60000) { // Less than 1 minute
+                    formattedDate = 'Just now';
+                } else if (diff < 3600000) { // Less than 1 hour
+                    const minutes = Math.floor(diff / 60000);
+                    formattedDate = `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+                } else if (diff < 86400000) { // Less than 1 day
+                    const hours = Math.floor(diff / 3600000);
+                    formattedDate = `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+                } else if (diff < 2592000000) { // Less than 30 days
+                    const days = Math.floor(diff / 86400000);
+                    formattedDate = `${days} day${days !== 1 ? 's' : ''} ago`;
+                } else {
+                    // Format as date
+                    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+                    formattedDate = date.toLocaleDateString(undefined, options);
+                }
+
+                element.textContent = formattedDate;
+            } catch (e) {
+                console.error('Error formatting date:', e);
+            }
+        });
+
+        // Format file sizes
+        const fileSizeElements = document.querySelectorAll('.file-size');
+
+        fileSizeElements.forEach(element => {
+            const size = element.dataset.size;
+            if (!size) return;
+
+            try {
+                const sizeNumber = parseInt(size, 10);
+                let formattedSize;
+
+                if (sizeNumber < 1024) {
+                    formattedSize = `${sizeNumber} B`;
+                } else if (sizeNumber < 1048576) { // 1024 * 1024
+                    formattedSize = `${(sizeNumber / 1024).toFixed(1)} KB`;
+                } else if (sizeNumber < 1073741824) { // 1024 * 1024 * 1024
+                    formattedSize = `${(sizeNumber / 1048576).toFixed(1)} MB`;
+                } else {
+                    formattedSize = `${(sizeNumber / 1073741824).toFixed(1)} GB`;
+                }
+
+                element.textContent = formattedSize;
+            } catch (e) {
+                console.error('Error formatting file size:', e);
+            }
+        });
+    });
+</script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
