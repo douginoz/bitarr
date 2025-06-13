@@ -562,14 +562,14 @@ class DatabaseManager:
                 name = ?, top_level_path = ?, end_time = ?, status = ?,
                 files_scanned = ?, files_unchanged = ?, files_modified = ?,
                 files_corrupted = ?, files_missing = ?, files_new = ?,
-                error_message = ?, notes = ?, total_size = ?
+                error_message = ?, notes = ?
             WHERE id = ?
         """
         params = (
             scan.name, scan.top_level_path, scan.end_time, scan.status,
             scan.files_scanned, scan.files_unchanged, scan.files_modified,
             scan.files_corrupted, scan.files_missing, scan.files_new,
-            scan.error_message, scan.notes, scan.total_size, scan.id
+            scan.error_message, scan.notes, scan.id
         )
         
         cursor = self.execute_query(query, params)
@@ -2577,13 +2577,13 @@ class DatabaseManager:
         query = """
             SELECT
                 sd.*,
-                sh.host_name as hostname,
-                sh.host_display_name,
-                sh.host_type,
-                sh.connection_status as host_is_active
+                sh.hostname,
+                sh.display_name as host_display_name,
+                sh.os_type,
+                sh.is_active as host_is_active
             FROM storage_devices sd
             LEFT JOIN scan_hosts sh ON sd.host_id = sh.id
-            ORDER BY sh.host_display_name, sd.name
+            ORDER BY sh.display_name, sd.name
         """
 
         rows = self.fetch_all(query)
@@ -2605,9 +2605,9 @@ class DatabaseManager:
         query = """
             SELECT
                 s.*,
-                sh.host_name as hostname,
-                sh.host_display_name,
-                sh.host_type,
+                sh.hostname,
+                sh.display_name as host_display_name,
+                sh.os_type,
                 sd.name as storage_device_name
             FROM scans s
             LEFT JOIN scan_hosts sh ON s.host_id = sh.id
@@ -2617,5 +2617,5 @@ class DatabaseManager:
         """
         params = (limit, offset)
 
-        rows = self.fetch_all(query, params)
+        rows = self.fetch_all(query)
         return rows

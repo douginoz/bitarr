@@ -333,8 +333,6 @@ class FileScanner:
             db_file.id = self.db.add_file(db_file)
             with self.size_lock:
                 self.total_size += metadata["size"]
-                print(f"DEBUG: Added {metadata['size']} bytes, total now: {self.total_size}")
-
             file_status = "new"
             prev_checksum_id = None
         else:
@@ -343,7 +341,6 @@ class FileScanner:
             db_file.size = metadata["size"]
             with self.size_lock:
                 self.total_size += metadata["size"]  # ADD THIS LINE
-                print(f"DEBUG: Added {metadata['size']} bytes, total now: {self.total_size}")
             db_file.last_modified = metadata["last_modified"]
             db_file.is_deleted = False
             self.db.update_file(db_file)
@@ -765,7 +762,6 @@ class FileScanner:
 
             self.current_scan.end_time = datetime.now(timezone.utc)
             self.current_scan.total_size = self.total_size
-            print(f"DEBUG: About to save scan with total_size: {self.current_scan.total_size}")  # ADD THIS LINE
 
             # Calculate scan duration
             if self.current_scan.start_time and self.current_scan.end_time:

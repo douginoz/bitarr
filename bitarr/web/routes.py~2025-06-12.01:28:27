@@ -90,76 +90,13 @@ def inject_now():
 @bp.route('/')
 def index():
     """
-    Home page / dashboard with v1.1.0 host information.
+    Home page / dashboard.
     """
-    # Get recent scans with host information (using new v1.1.0 method)
-    try:
-        recent_scans_data = db.get_scans_with_host_info(limit=5)
-        # Convert to Scan objects for template compatibility
-        recent_scans = []
-        for scan_data in recent_scans_data:
-            # Create a Scan object from the data
-            from bitarr.db.models import Scan
-            scan = Scan(**{k: v for k, v in scan_data.items() if k in [
-                'id', 'name', 'top_level_path', 'start_time', 'end_time', 'status',
-                'files_scanned', 'files_unchanged', 'files_modified', 'files_corrupted',
-                'files_missing', 'files_new', 'checksum_method', 'scheduled_scan_id',
-                'error_message', 'notes', 'host_id', 'host_name', 'host_ip',
-                'host_display_name', 'storage_device_id', 'scan_duration_seconds',
-                'bitrot_clusters_detected', 'total_size'
-            ]})
-            # Add extra host info as attributes for template access
-            scan.hostname = scan_data.get('hostname')
-            scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
-            scan.storage_device_name = scan_data.get('storage_device_name')
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                            scan.files_corrupted + scan.files_new)
-            recent_scans.append(scan)
-    except Exception as e:
-        print(f"Error getting scans with host info: {e}")
-        # Fallback to old method
-        recent_scans = db.get_recent_scans(limit=5)
+    # Get recent scans
+    recent_scans = db.get_recent_scans(limit=5)
 
-    # Get storage devices with host information (hybrid approach)
-    try:
-        # Get live device data from detector
-        live_devices = device_detector.detect_devices()
-
-        # Get database devices with host info
-        db_devices = db.get_storage_devices_with_host_info()
-
-        # Merge the data: live device info + database host info
-        storage_devices = []
-        for live_device in live_devices:
-            # Find matching database device by device_id or mount_point
-            db_device = None
-            for db_dev in db_devices:
-                if (db_dev.get('device_id') == live_device.get('device_id') or
-                    db_dev.get('mount_point') == live_device.get('mount_point')):
-                    db_device = db_dev
-                    break
-
-            # Merge the data
-            merged_device = live_device.copy()  # Start with live data
-            if db_device:
-                # Add host information from database
-                merged_device['host_display_name'] = db_device.get('host_display_name')
-                merged_device['hostname'] = db_device.get('hostname')
-                merged_device['host_type'] = db_device.get('host_type')
-
-            storage_devices.append(merged_device)
-
-    except Exception as e:
-        print(f"Error merging device data: {e}")
-        # Fallback to device detector only
-        storage_devices = device_detector.detect_devices()
-
-    # Get scan hosts information (new v1.1.0 feature)
-    try:
-        scan_hosts = db.get_all_scan_hosts()
-    except Exception as e:
-        print(f"Error getting scan hosts: {e}")
-        scan_hosts = []
+    # Get storage devices
+    devices = device_detector.detect_devices()
 
     # Get database info
     db_info = db.get_database_info()
@@ -167,8 +104,7 @@ def index():
     return render_template(
         'index.html',
         recent_scans=recent_scans,
-        storage_devices=storage_devices,
-        scan_hosts=scan_hosts,  # New v1.1.0 data
+        storage_devices=devices,
         active_scans=active_scans,
         db_info=db_info
     )
@@ -176,7 +112,7 @@ def index():
 @bp.route('/scan_history')
 def scan_history():
     """
-    Scan history page with v1.1.0 host information.
+    Scan history page.
     """
     # Get page parameters
     current_page = request.args.get('page', 1, type=int)
@@ -188,34 +124,8 @@ def scan_history():
     # Calculate offset
     offset = (current_page - 1) * page_size
 
-    # Get paginated scans with host information (using new v1.1.0 method)
-    try:
-        scans_data = db.get_scans_with_host_info(limit=page_size, offset=offset)
-        # Convert to Scan objects for template compatibility
-        scans = []
-        for scan_data in scans_data:
-            # Create a Scan object from the data
-            from bitarr.db.models import Scan
-            scan = Scan(**{k: v for k, v in scan_data.items() if k in [
-                'id', 'name', 'top_level_path', 'start_time', 'end_time', 'status',
-                'files_scanned', 'files_unchanged', 'files_modified', 'files_corrupted',
-                'files_missing', 'files_new', 'checksum_method', 'scheduled_scan_id',
-                'error_message', 'notes', 'host_id', 'host_name', 'host_ip',
-                'host_display_name', 'storage_device_id', 'scan_duration_seconds',
-                'bitrot_clusters_detected', 'total_size'
-            ]})
-            # Add extra host info as attributes for template access
-            scan.hostname = scan_data.get('hostname')
-            scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
-            scan.storage_device_name = scan_data.get('storage_device_name')
-            # Calculate actual file count for scan history display
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                                        scan.files_corrupted + scan.files_new)
-            scans.append(scan)
-    except Exception as e:
-        print(f"Error getting scans with host info: {e}")
-        # Fallback to old method
-        scans = db.get_recent_scans(limit=page_size, offset=offset)
+    # Get paginated scans
+    scans = db.get_recent_scans(limit=page_size, offset=offset)
 
     return render_template(
         'scan_history.html',

@@ -208,9 +208,6 @@ def scan_history():
             scan.hostname = scan_data.get('hostname')
             scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
             scan.storage_device_name = scan_data.get('storage_device_name')
-            # Calculate actual file count for scan history display
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                                        scan.files_corrupted + scan.files_new)
             scans.append(scan)
     except Exception as e:
         print(f"Error getting scans with host info: {e}")

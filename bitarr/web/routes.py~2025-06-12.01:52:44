@@ -112,47 +112,21 @@ def index():
             scan.hostname = scan_data.get('hostname')
             scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
             scan.storage_device_name = scan_data.get('storage_device_name')
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                            scan.files_corrupted + scan.files_new)
             recent_scans.append(scan)
     except Exception as e:
         print(f"Error getting scans with host info: {e}")
         # Fallback to old method
         recent_scans = db.get_recent_scans(limit=5)
 
-    # Get storage devices with host information (hybrid approach)
+    # Get storage devices with host information (using new v1.1.0 method)
     try:
-        # Get live device data from detector
-        live_devices = device_detector.detect_devices()
-
-        # Get database devices with host info
-        db_devices = db.get_storage_devices_with_host_info()
-
-        # Merge the data: live device info + database host info
-        storage_devices = []
-        for live_device in live_devices:
-            # Find matching database device by device_id or mount_point
-            db_device = None
-            for db_dev in db_devices:
-                if (db_dev.get('device_id') == live_device.get('device_id') or
-                    db_dev.get('mount_point') == live_device.get('mount_point')):
-                    db_device = db_dev
-                    break
-
-            # Merge the data
-            merged_device = live_device.copy()  # Start with live data
-            if db_device:
-                # Add host information from database
-                merged_device['host_display_name'] = db_device.get('host_display_name')
-                merged_device['hostname'] = db_device.get('hostname')
-                merged_device['host_type'] = db_device.get('host_type')
-
-            storage_devices.append(merged_device)
-
+        storage_devices_data = db.get_storage_devices_with_host_info()
+        storage_devices = storage_devices_data  # Use the enhanced data directly
     except Exception as e:
-        print(f"Error merging device data: {e}")
-        # Fallback to device detector only
-        storage_devices = device_detector.detect_devices()
+        print(f"Error getting devices with host info: {e}")
+        # Fallback to device detector
+        devices = device_detector.detect_devices()
+        storage_devices = devices
 
     # Get scan hosts information (new v1.1.0 feature)
     try:
@@ -208,9 +182,6 @@ def scan_history():
             scan.hostname = scan_data.get('hostname')
             scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
             scan.storage_device_name = scan_data.get('storage_device_name')
-            # Calculate actual file count for scan history display
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                                        scan.files_corrupted + scan.files_new)
             scans.append(scan)
     except Exception as e:
         print(f"Error getting scans with host info: {e}")

@@ -112,13 +112,16 @@ def index():
             scan.hostname = scan_data.get('hostname')
             scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
             scan.storage_device_name = scan_data.get('storage_device_name')
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                            scan.files_corrupted + scan.files_new)
             recent_scans.append(scan)
     except Exception as e:
         print(f"Error getting scans with host info: {e}")
         # Fallback to old method
         recent_scans = db.get_recent_scans(limit=5)
+
+    print("DEBUG: Recent scans data:")
+    for i, scan in enumerate(recent_scans[:2]):  # Just first 2 scans
+        print(f"  Scan {i}: host_display_name = '{getattr(scan, 'host_display_name', 'NOT SET')}'")
+        print(f"  Scan {i}: hostname = '{getattr(scan, 'hostname', 'NOT SET')}'")
 
     # Get storage devices with host information (hybrid approach)
     try:
@@ -154,9 +157,17 @@ def index():
         # Fallback to device detector only
         storage_devices = device_detector.detect_devices()
 
+    print("DEBUG: Storage devices data:")
+    for i, device in enumerate(storage_devices[:2]):  # Just first 2 devices
+        if isinstance(device, dict):
+            print(f"  Device {i}: host_display_name = '{device.get('host_display_name', 'NOT SET')}'")
+        else:
+            print(f"  Device {i}: host_display_name = '{getattr(device, 'host_display_name', 'NOT SET')}'")
+
     # Get scan hosts information (new v1.1.0 feature)
     try:
         scan_hosts = db.get_all_scan_hosts()
+        print(f"DEBUG: scan_hosts = {scan_hosts}")  # ADD THIS LINE
     except Exception as e:
         print(f"Error getting scan hosts: {e}")
         scan_hosts = []
@@ -208,9 +219,6 @@ def scan_history():
             scan.hostname = scan_data.get('hostname')
             scan.host_display_name = scan_data.get('host_display_name') or scan_data.get('host_name')
             scan.storage_device_name = scan_data.get('storage_device_name')
-            # Calculate actual file count for scan history display
-            scan.total_files_processed = (scan.files_unchanged + scan.files_modified +
-                                        scan.files_corrupted + scan.files_new)
             scans.append(scan)
     except Exception as e:
         print(f"Error getting scans with host info: {e}")

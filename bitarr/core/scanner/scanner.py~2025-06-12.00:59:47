@@ -5,9 +5,6 @@ import os
 import threading
 import time
 import queue
-import socket
-import platform
-
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Callable, Tuple, Any
 from pathlib import Path
@@ -45,8 +42,6 @@ class FileScanner:
         self.threads = []
         self.files_processed = 0
         self.total_files = 0
-        self.total_size = 0
-        self.size_lock = threading.Lock()
         self.progress_callbacks = []
     
     def add_progress_callback(self, callback: Callable[[Dict], None]) -> None:
@@ -177,7 +172,6 @@ class FileScanner:
         # Reset counters
         self.files_processed = 0
         self.total_files = 0
-        self.total_size = 0
         self.stop_event.clear()
         
         try:
@@ -214,7 +208,6 @@ class FileScanner:
             else:
                 self.current_scan.status = "completed"
             
-            self.current_scan.total_size = self.total_size
             self.current_scan.end_time = datetime.now(timezone.utc)
             self.current_scan.files_scanned = self.files_processed
             self.db.update_scan(self.current_scan)
@@ -331,19 +324,12 @@ class FileScanner:
                 file_type=metadata["file_type"]
             )
             db_file.id = self.db.add_file(db_file)
-            with self.size_lock:
-                self.total_size += metadata["size"]
-                print(f"DEBUG: Added {metadata['size']} bytes, total now: {self.total_size}")
-
             file_status = "new"
             prev_checksum_id = None
         else:
             # Update existing file
             db_file.last_seen = datetime.now(timezone.utc)
             db_file.size = metadata["size"]
-            with self.size_lock:
-                self.total_size += metadata["size"]  # ADD THIS LINE
-                print(f"DEBUG: Added {metadata['size']} bytes, total now: {self.total_size}")
             db_file.last_modified = metadata["last_modified"]
             db_file.is_deleted = False
             self.db.update_file(db_file)
@@ -545,263 +531,3 @@ class FileScanner:
                 }
             finally:
                 conn.close()
-
-    def _get_current_host_info(self):
-        """Get current host information for linking scans and storage devices."""
-        try:
-            hostname = socket.gethostname()
-
-            # Try to get local IP (not 127.0.0.1)
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 80))  # Connect to Google DNS
-                local_ip = s.getsockname()[0]
-            except Exception:
-                local_ip = '127.0.0.1'
-            finally:
-                s.close()
-
-            host_type = 'linux' if platform.system().lower() == 'linux' else 'windows'
-            display_name = f"{local_ip} ({hostname})"
-
-            return {
-                'host_name': hostname,
-                'host_ip': local_ip,
-                'host_display_name': display_name,
-                'host_type': host_type
-            }
-        except Exception as e:
-            print(f"Warning: Could not detect host info: {e}")
-            return {
-                'host_name': 'localhost',
-                'host_ip': '127.0.0.1',
-                'host_display_name': '127.0.0.1 (localhost)',
-                'host_type': 'linux'
-            }
-
-    def _get_or_create_current_host(self):
-        """Get or create the current host in the database."""
-        host_info = self._get_current_host_info()
-
-        # Check if host exists
-        query = "SELECT * FROM scan_hosts WHERE host_name = ? AND host_ip = ?"
-        params = (host_info['host_name'], host_info['host_ip'])
-
-        host_row = self.db.fetch_one(query, params)
-
-        if host_row:
-            # Update last_seen for existing host
-            host_id = host_row['id']
-            update_query = """
-                UPDATE scan_hosts
-                SET last_seen = ?, connection_status = 'online', updated_at = ?
-                WHERE id = ?
-            """
-            update_params = (datetime.now(timezone.utc), datetime.now(timezone.utc), host_id)
-            self.db.execute_query(update_query, update_params)
-
-            return host_row
-        else:
-            # Create new host
-            insert_query = """
-                INSERT INTO scan_hosts
-                (host_name, host_ip, host_display_name, host_type, client_version, connection_status, last_seen, created_at, updated_at)
-                VALUES (?, ?, ?, ?, '1.1.0', 'online', ?, ?, ?)
-            """
-            now = datetime.now(timezone.utc)
-            insert_params = (
-                host_info['host_name'], host_info['host_ip'], host_info['host_display_name'],
-                host_info['host_type'], now, now, now
-            )
-            cursor = self.db.execute_query(insert_query, insert_params)
-
-            # Return the created host
-            host_row = self.db.fetch_one("SELECT * FROM scan_hosts WHERE id = ?", (cursor.lastrowid,))
-            return host_row
-
-    # REPLACE the existing scan method with this updated version:
-    def scan(
-        self,
-        top_level_path: str,
-        name: Optional[str] = None,
-        checksum_method: str = "sha256",
-        threads: int = 4,
-        exclude_dirs: List[str] = None,
-        exclude_patterns: List[str] = None,
-        scheduled_scan_id: Optional[int] = None
-    ) -> int:
-        """
-        Scan a directory tree, calculate checksums, and detect changes.
-
-        Args:
-            top_level_path: Top-level directory to scan
-            name: Name for the scan
-            checksum_method: Checksum algorithm to use
-            threads: Number of threads to use
-            exclude_dirs: List of directory names to exclude
-            exclude_patterns: List of glob patterns to exclude
-            scheduled_scan_id: ID of the scheduled scan, if any
-
-        Returns:
-            int: Scan ID
-        """
-        # Validate path
-        if not os.path.exists(top_level_path):
-            raise ScannerError(f"Path does not exist: {top_level_path}")
-
-        if not os.path.isdir(top_level_path):
-            raise ScannerError(f"Path is not a directory: {top_level_path}")
-
-        # Get or create current host
-        current_host = self._get_or_create_current_host()
-
-        # Initialize checksum calculator
-        self.checksum_calculator = ChecksumCalculator(checksum_method)
-
-        # Detect storage device for this path
-        device_info = self.device_detector.get_device_by_path(top_level_path)
-        if not device_info:
-            device_info = {
-                "device_id": f"unknown_{hash(top_level_path)}",
-                "name": f"Unknown Device ({top_level_path})",
-                "mount_point": "/",
-                "device_type": "unknown",
-                "total_size": 0,
-                "used_size": 0
-            }
-
-        # Check if the device exists in the database
-        storage_device = self.db.get_storage_device(
-            device_id=device_info['device_id'],
-            mount_point=device_info['mount_point']
-        )
-
-        if not storage_device:
-            # Create a new storage device with host relationship
-            storage_device = StorageDevice(
-                name=device_info['name'],
-                mount_point=device_info['mount_point'],
-                device_type=device_info['device_type'],
-                total_size=device_info['total_size'],
-                used_size=device_info['used_size'],
-                device_id=device_info['device_id'],
-                # v1.1.0 host relationship fields
-                host_id=current_host['id'],
-                host_name=current_host['host_name'],
-                host_ip=current_host['host_ip'],
-                host_display_name=current_host['host_display_name']
-            )
-            storage_device.id = self.db.add_storage_device(storage_device)
-        else:
-            # Update the existing device with host relationship
-            storage_device.last_seen = datetime.now(timezone.utc)
-            storage_device.is_connected = True
-            storage_device.total_size = device_info['total_size']
-            storage_device.used_size = device_info['used_size']
-            # Update host relationship if not already set
-            if not storage_device.host_id:
-                storage_device.host_id = current_host['id']
-                storage_device.host_name = current_host['host_name']
-                storage_device.host_ip = current_host['host_ip']
-                storage_device.host_display_name = current_host['host_display_name']
-            self.db.update_storage_device(storage_device)
-
-        # Create scan record with host and storage device relationships
-        self.current_scan = Scan(
-            name=name,
-            top_level_path=top_level_path,
-            start_time=datetime.now(timezone.utc),
-            status="running",
-            checksum_method=checksum_method,
-            scheduled_scan_id=scheduled_scan_id,
-            # v1.1.0 relationship fields
-            host_id=current_host['id'],
-            host_name=current_host['host_name'],
-            host_ip=current_host['host_ip'],
-            host_display_name=current_host['host_display_name'],
-            storage_device_id=storage_device.id
-        )
-        self.current_scan.id = self.db.add_scan(self.current_scan)
-
-        # Reset counters
-        self.files_processed = 0
-        self.total_files = 0
-        self.total_size = 0
-        self.stop_event.clear()
-
-        try:
-            # Estimate total files
-            self._report_progress("counting", current_path=top_level_path)
-            self.total_files = self._count_files(top_level_path, exclude_dirs, exclude_patterns)
-            self._report_progress("starting", storage_device_id=storage_device.id)
-
-            # Use a thread pool to process files
-            self.threads = []
-            for _ in range(threads):
-                thread = threading.Thread(target=self._worker, daemon=True)
-                thread.start()
-                self.threads.append(thread)
-
-            # Enqueue all files
-            for file_path in walk_directory(top_level_path, exclude_dirs, exclude_patterns):
-                if self.stop_event.is_set():
-                    break
-
-                self.queue.put((file_path, storage_device.id))
-
-            # Add sentinel values to signal worker threads to exit
-            for _ in range(threads):
-                self.queue.put(None)
-
-            # Wait for all threads to finish
-            for thread in self.threads:
-                thread.join()
-
-            # Update scan completion
-            if self.stop_event.is_set():
-                self.current_scan.status = "aborted"
-            else:
-                self.current_scan.status = "completed"
-
-            self.current_scan.end_time = datetime.now(timezone.utc)
-            self.current_scan.total_size = self.total_size
-            print(f"DEBUG: About to save scan with total_size: {self.current_scan.total_size}")  # ADD THIS LINE
-
-            # Calculate scan duration
-            if self.current_scan.start_time and self.current_scan.end_time:
-                duration = self.current_scan.end_time - self.current_scan.start_time
-                self.current_scan.scan_duration_seconds = int(duration.total_seconds())
-
-            # Find missing files
-            missing_files = self.find_missing_files(top_level_path, storage_device.id)
-            self.current_scan.files_missing = len(missing_files)
-
-            # Final update of scan record
-            self.db.update_scan(self.current_scan)
-
-            # Report final progress
-            self._report_progress("completed")
-
-            return self.current_scan.id
-
-        except Exception as e:
-            # Handle scan errors
-            self.current_scan.status = "failed"
-            self.current_scan.error_message = str(e)
-            self.current_scan.end_time = datetime.now(timezone.utc)
-            self.db.update_scan(self.current_scan)
-
-            self._report_progress("failed", error=str(e))
-            raise ScannerError(f"Scan failed: {e}")
-
-        finally:
-            # Cleanup
-            self.threads.clear()
-
-            # Clear the queue
-            while not self.queue.empty():
-                try:
-                    self.queue.get_nowait()
-                    self.queue.task_done()
-                except queue.Empty:
-                    break

@@ -765,7 +765,6 @@ class FileScanner:
 
             self.current_scan.end_time = datetime.now(timezone.utc)
             self.current_scan.total_size = self.total_size
-            print(f"DEBUG: About to save scan with total_size: {self.current_scan.total_size}")  # ADD THIS LINE
 
             # Calculate scan duration
             if self.current_scan.start_time and self.current_scan.end_time:

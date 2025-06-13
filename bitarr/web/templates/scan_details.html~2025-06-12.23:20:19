@@ -1,0 +1,469 @@
+{% extends 'layout.html' %}
+
+{% block title %}Bitarr - Scan Details{% endblock %}
+
+{% block content %}
+<div class="scan-details">
+    <div class="page-header">
+        <h1>
+            {% if scan.name %}
+                {{ scan.name }} on {{ scan.host_display_name }}
+            {% else %}
+                Scan of {{ scan.top_level_path }} on {{ scan.host_display_name }}
+            {% endif %}
+        </h1>
+        <div class="scan-meta">
+            <span class="meta-item">
+                📅 {{ scan.start_time|strftime('%Y-%m-%d %H:%M') }}
+            </span>
+            <span class="meta-item">
+                📊 {{ scan.files_scanned|thousands_separator }} files scanned
+            </span>
+            <span class="meta-item">
+                {% if scan.start_time and scan.end_time %}
+                    ⏱️ {{ ((scan.end_time - scan.start_time).total_seconds())|round(1) }}s duration
+                {% else %}
+                    ⏱️ Duration unknown
+                {% endif %}
+            </span>
+        </div>
+        <div class="actions">
+            <button class="btn secondary" onclick="history.back()">← Back to History</button>
+            <button class="btn primary rescan-btn" data-path="{{ scan.top_level_path }}">Rescan Path</button>
+        </div>
+    </div>
+
+    <!-- Health Status Banner -->
+    <div class="health-status">
+        {% if scan.files_corrupted > 0 %}
+            <div class="alert alert-critical">
+                <h3>🚨 Critical Issues Found</h3>
+                <p><strong>{{ scan.files_corrupted }} corrupted files</strong> detected during this scan. These files may be unrecoverable.</p>
+            </div>
+        {% elif scan.files_missing > 0 %}
+            <div class="alert alert-warning">
+                <h3>⚠️ Missing Files Detected</h3>
+                <p><strong>{{ scan.files_missing }} files</strong> that were previously scanned are now missing.</p>
+            </div>
+        {% elif summary.error_count > 0 %}
+            <div class="alert alert-warning">
+                <h3>⚠️ Scanning Issues Detected</h3>
+                <p><strong>{{ summary.error_count }} error(s)</strong> occurred during scanning. Some files may not have been checked properly.</p>
+                <p>This may indicate storage hardware problems or file access issues.</p>
+            </div>
+        {% elif scan.files_unchanged > 0 %}
+            <div class="alert alert-success">
+                <h3>✅ All Files Verified</h3>
+                <p>All {{ scan.files_scanned }} files have been verified and are identical to previous scans.</p>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <h3>📋 Initial Scan Complete</h3>
+                <p>This appears to be the first scan of these files. {{ scan.files_scanned }} files have been catalogued and will be checked for changes in future scans.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- File Status Overview -->
+    <div class="grid grid-2" style="margin-top: 20px;">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">File Status Summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="status-grid">
+                    {% if scan.files_unchanged > 0 %}
+                        <div class="status-item status-good">
+                            <div class="status-count">{{ scan.files_unchanged|thousands_separator }}</div>
+                            <div class="status-label">Unchanged</div>
+                            <div class="status-percent">({{ ((scan.files_unchanged / scan.files_scanned) * 100)|round(1) }}%)</div>
+                        </div>
+                    {% endif %}
+
+                    {% if scan.files_modified > 0 %}
+                        <div class="status-item status-modified">
+                            <div class="status-count">{{ scan.files_modified|thousands_separator }}</div>
+                            <div class="status-label">Modified</div>
+                            <div class="status-percent">({{ ((scan.files_modified / scan.files_scanned) * 100)|round(1) }}%)</div>
+                        </div>
+                    {% endif %}
+
+                    {% if scan.files_corrupted > 0 %}
+                        <div class="status-item status-critical">
+                            <div class="status-count">{{ scan.files_corrupted|thousands_separator }}</div>
+                            <div class="status-label">Corrupted</div>
+                            <div class="status-percent">({{ ((scan.files_corrupted / scan.files_scanned) * 100)|round(1) }}%)</div>
+                        </div>
+                    {% endif %}
+
+                    {% if scan.files_missing > 0 %}
+                        <div class="status-item status-warning">
+                            <div class="status-count">{{ scan.files_missing|thousands_separator }}</div>
+                            <div class="status-label">Missing</div>
+                            <div class="status-percent">({{ ((scan.files_missing / scan.files_scanned) * 100)|round(1) }}%)</div>
+                        </div>
+                    {% endif %}
+
+                    {% if scan.files_new > 0 %}
+                        <div class="status-item status-new">
+                            <div class="status-count">{{ scan.files_new|thousands_separator }}</div>
+                            <div class="status-label">New</div>
+                            <div class="status-percent">({{ ((scan.files_new / scan.files_scanned) * 100)|round(1) }}%)</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Scan Information</h2>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Host</div>
+                        <div class="info-value">{{ scan.host_display_name }}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Scan Path</div>
+                        <div class="info-value">{{ scan.top_level_path }}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Checksum Method</div>
+                        <div class="info-value">{{ scan.checksum_method|upper }}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Storage Device</div>
+                        <div class="info-value">
+                            {% if summary.storage_devices %}
+                                {{ summary.storage_devices[0].name }}
+                            {% else %}
+                                Unknown
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Duration</div>
+                        <div class="info-value">
+                            {% if scan.start_time and scan.end_time %}
+                                {{ ((scan.end_time - scan.start_time).total_seconds())|round(1) }} seconds
+                            {% else %}
+                                Unknown
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Status</div>
+                        <div class="info-value">
+                            {% if scan.status == 'completed' %}
+                                <span class="badge badge-success">Completed</span>
+                            {% elif scan.status == 'running' %}
+                                <span class="badge badge-info">Running</span>
+                            {% elif scan.status == 'failed' %}
+                                <span class="badge badge-danger">Failed</span>
+                            {% else %}
+                                <span class="badge badge-secondary">{{ scan.status|title }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Errors Section - Prominent if errors exist -->
+    {% if summary.error_count > 0 %}
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header">
+                <h2 class="card-title">⚠️ Scan Errors ({{ summary.error_count }})</h2>
+            </div>
+            <div class="card-body">
+                <div class="error-explanation">
+                    <p><strong>What this means:</strong> {{ summary.error_count }} file(s) could not be scanned properly. This often indicates:</p>
+                    <ul>
+                        <li>Storage hardware issues (like the I/O errors we detected)</li>
+                        <li>File permission problems</li>
+                        <li>Files that are currently in use by other programs</li>
+                        <li>Corrupted files that cannot be read</li>
+                    </ul>
+                    <p><strong>What to do:</strong> Review the error details below and consider running storage diagnostics.</p>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>File Path</th>
+                                <th>Error Type</th>
+                                <th>Error Message</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for error in errors %}
+                                <tr>
+                                    <td class="file-path">{{ error.file_path }}</td>
+                                    <td>
+                                        <span class="badge badge-warning">{{ error.error_type }}</span>
+                                    </td>
+                                    <td>{{ error.error_message }}</td>
+                                    <td class="time-ago" data-timestamp="{{ error.timestamp }}">
+                                        {{ error.timestamp|strftime('%H:%M:%S') }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- File Listing Section -->
+    <div class="card" style="margin-top: 20px;">
+        <div class="card-header">
+            <h2 class="card-title">Scanned Files</h2>
+            <div class="card-actions">
+                <input type="text" class="search-filter" placeholder="Filter files..." />
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="file-list-info">
+                <p>Showing files from this scan. Use the search box to filter results.</p>
+            </div>
+
+            <!-- For now, show a placeholder since we don't have the actual file list -->
+            <div class="file-list-placeholder">
+                <div class="placeholder-message">
+                    <h3>📁 File Details</h3>
+                    <p>Individual file details are not currently available in this view.</p>
+                    <p><strong>{{ scan.files_scanned }} files</strong> were successfully scanned using {{ scan.checksum_method|upper }} checksums.</p>
+
+                    {% if summary.error_count > 0 %}
+                        <p><strong>{{ summary.error_count }} files</strong> encountered errors during scanning (shown above).</p>
+                    {% endif %}
+
+                    <div class="placeholder-actions">
+                        <button class="btn secondary" onclick="alert('File listing functionality will be added in a future update.')">
+                            View Full File List
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions" style="margin-top: 30px; text-align: center;">
+        <button class="btn secondary" onclick="history.back()">← Back to Scan History</button>
+        <button class="btn primary rescan-btn" data-path="{{ scan.top_level_path }}">Rescan This Path</button>
+        {% if summary.error_count > 0 %}
+            <button class="btn warning" onclick="alert('Storage diagnostics will guide you through checking your drive health.')">
+                Run Storage Diagnostics
+            </button>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+/* Scan Details Specific Styles */
+.scan-details .page-header h1 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.scan-meta {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #666;
+}
+
+.health-status {
+    margin-bottom: 20px;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+}
+
+.alert-critical {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+}
+
+.status-item {
+    text-align: center;
+    padding: 15px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.status-good {
+    background-color: #d4edda;
+    border-color: #28a745;
+}
+
+.status-modified {
+    background-color: #d1ecf1;
+    border-color: #17a2b8;
+}
+
+.status-warning {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.status-critical {
+    background-color: #f8d7da;
+    border-color: #dc3545;
+}
+
+.status-new {
+    background-color: #e2e3e5;
+    border-color: #6c757d;
+}
+
+.status-count {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.status-label {
+    font-size: 14px;
+    margin-bottom: 3px;
+}
+
+.status-percent {
+    font-size: 12px;
+    color: #666;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.info-label {
+    font-weight: bold;
+    color: #555;
+}
+
+.info-value {
+    color: #333;
+}
+
+.error-explanation {
+    background-color: #fff3cd;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.error-explanation ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.file-list-placeholder {
+    text-align: center;
+    padding: 40px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.placeholder-message h3 {
+    margin-bottom: 15px;
+    color: #495057;
+}
+
+.placeholder-actions {
+    margin-top: 20px;
+}
+
+.search-filter {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle rescan buttons
+    const rescanButtons = document.querySelectorAll('.rescan-btn');
+    rescanButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const path = this.dataset.path;
+            // Open new scan modal with path pre-filled
+            const newScanModal = document.getElementById('newScanModal');
+            const scanPathInput = document.getElementById('scanPath');
+
+            if (newScanModal && scanPathInput) {
+                scanPathInput.value = path;
+                openModal(newScanModal);
+            } else {
+                alert('Starting new scan for: ' + path);
+            }
+        });
+    });
+
+    // Handle search filter
+    const searchFilter = document.querySelector('.search-filter');
+    if (searchFilter) {
+        searchFilter.addEventListener('input', function() {
+            // Placeholder for file filtering functionality
+            console.log('Filtering files with:', this.value);
+        });
+    }
+
+    // Helper function to open modal
+    function openModal(modal) {
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    }
+});
+</script>
+{% endblock %}

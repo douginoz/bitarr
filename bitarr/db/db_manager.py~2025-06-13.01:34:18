@@ -569,7 +569,7 @@ class DatabaseManager:
             scan.name, scan.top_level_path, scan.end_time, scan.status,
             scan.files_scanned, scan.files_unchanged, scan.files_modified,
             scan.files_corrupted, scan.files_missing, scan.files_new,
-            scan.error_message, scan.notes, scan.total_size, scan.id
+            scan.error_message, scan.notes, scan.id
         )
         
         cursor = self.execute_query(query, params)

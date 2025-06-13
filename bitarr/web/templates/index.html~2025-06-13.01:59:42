@@ -122,6 +122,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="time-ago" data-timestamp="{{ scan.start_time }}">
+                                    <td class="time-ago" data-timestamp="{{ scan.start_time }}">
                                         {{ scan.start_time }}
                                     </td>
                                     <!-- NEW: Display host information -->

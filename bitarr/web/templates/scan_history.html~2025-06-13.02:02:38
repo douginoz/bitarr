@@ -12,83 +12,75 @@
         </div>
     </div>
 
-<div class="card">
-       <div class="card-body">
-           {% if scans %}
-               <div class="table-container">
-                   <table id="scansTable">
-                       <thead>
-                           <tr>
-                               <th>Status</th>
-                               <th>Name</th>
-                               <th>Date & Time</th>
-                               <th>Top-Level Path</th>
-                               <th>Files</th>
-                               <th>Total Size</th>
-                               <th>File Status Summary</th>
-                               <th>Actions</th>
-                           </tr>
-                       </thead>
-                       <tbody>
-                           {% for scan in scans %}
-                           <tr class="scan-row" data-scan-id="{{ scan.id }}">
-                               <td>
-                                   {% if scan.status == 'completed' %}
-                                       {% if scan.files_corrupted > 0 %}
-                                           <span class="status-indicator status-critical"></span> Critical
-                                       {% elif scan.files_missing > 0 %}
-                                           <span class="status-indicator status-warning"></span> Warning
-                                       {% else %}
-                                           <span class="status-indicator status-good"></span> Good
-                                       {% endif %}
-                                   {% elif scan.status == 'running' %}
-                                       <span class="status-indicator status-running"></span> Running
-                                   {% elif scan.status == 'failed' %}
-                                       <span class="status-indicator status-critical"></span> Failed
-                                   {% else %}
-                                       <span class="status-indicator status-warning"></span> {{ scan.status|title }}
-                                   {% endif %}
-                               </td>
-                               <td>
-                                   {% if scan.name %}
-                                       <strong>{{ scan.name }}</strong>
-                                   {% else %}
-                                       <em class="text-muted">Unnamed</em>
-                                   {% endif %}
-                               </td>
-                               <td class="time-ago" data-timestamp="{{ scan.start_time }}">
-                                   {{ scan.start_time }}
-                               </td>
-                               <td class="path">{{ scan.top_level_path }}</td>
-                               <td>{{ scan.total_files_processed|default(0)|thousands_separator }}</td>
-                               <td class="file-size" data-size="{{ scan.total_size|default(0) }}">
-                                   {{ scan.total_size|default(0)|format_size }}
-                               </td>
-                               <td class="file-stats">
-                                   {% if scan.files_unchanged %}
-                                       <span class="stat-pill unchanged">{{ scan.files_unchanged|thousands_separator }} Unchanged</span>
-                                   {% endif %}
-                                   {% if scan.files_modified %}
-                                       <span class="stat-pill modified">{{ scan.files_modified|thousands_separator }} Modified</span>
-                                   {% endif %}
-                                   {% if scan.files_corrupted %}
-                                       <span class="stat-pill corrupted">{{ scan.files_corrupted|thousands_separator }} Corrupted</span>
-                                   {% endif %}
-                                   {% if scan.files_missing %}
-                                       <span class="stat-pill missing">{{ scan.files_missing|thousands_separator }} Missing</span>
-                                   {% endif %}
-                                   {% if scan.files_new %}
-                                       <span class="stat-pill new">{{ scan.files_new|thousands_separator }} New</span>
-                                   {% endif %}
-                               </td>
-                               <td>
-                                   <a href="{{ url_for('routes.scan_details', scan_id=scan.id) }}" class="btn small primary">Details</a>
-                                   <button class="btn small secondary rescan-btn" data-path="{{ scan.top_level_path }}">Rescan</button>
-                               </td>
-                           </tr>
-                           {% endfor %}
-                       </tbody>
-                   </table>
+    <div class="card">
+        <div class="card-body">
+            {% if scans %}
+                <div class="table-container">
+                    <table id="scansTable">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Date & Time</th>
+                                <th>Top-Level Path</th>
+                                <th>Files</th>
+                                <th>Total Size</th>
+                                <th>File Status Summary</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for scan in scans %}
+                            <tr class="scan-row" data-scan-id="{{ scan.id }}">
+                                <td>
+                                    {% if scan.status == 'completed' %}
+                                        {% if scan.files_corrupted > 0 %}
+                                            <span class="status-indicator status-critical"></span> Critical
+                                        {% elif scan.files_missing > 0 %}
+                                            <span class="status-indicator status-warning"></span> Warning
+                                        {% else %}
+                                            <span class="status-indicator status-good"></span> Good
+                                        {% endif %}
+                                    {% elif scan.status == 'running' %}
+                                        <span class="status-indicator status-running"></span> Running
+                                    {% elif scan.status == 'failed' %}
+                                        <span class="status-indicator status-critical"></span> Failed
+                                    {% else %}
+                                        <span class="status-indicator status-warning"></span> {{ scan.status|title }}
+                                    {% endif %}
+                                </td>
+                                <td class="time-ago" data-timestamp="{{ scan.start_time }}">
+                                    {{ scan.start_time }}
+                                </td>
+                                <td class="path">{{ scan.top_level_path }}</td>
+                                <td>{{ scan.total_files_processed|default(0)|thousands_separator }}</td>
+                                <td class="file-size" data-size="{{ scan.total_size|default(0) }}">
+                                    {{ scan.total_size|default(0)|format_size }}
+                                </td>
+                                <td class="file-stats">
+                                    {% if scan.files_unchanged %}
+                                        <span class="stat-pill unchanged">{{ scan.files_unchanged|thousands_separator }} Unchanged</span>
+                                    {% endif %}
+                                    {% if scan.files_modified %}
+                                        <span class="stat-pill modified">{{ scan.files_modified|thousands_separator }} Modified</span>
+                                    {% endif %}
+                                    {% if scan.files_corrupted %}
+                                        <span class="stat-pill corrupted">{{ scan.files_corrupted|thousands_separator }} Corrupted</span>
+                                    {% endif %}
+                                    {% if scan.files_missing %}
+                                        <span class="stat-pill missing">{{ scan.files_missing|thousands_separator }} Missing</span>
+                                    {% endif %}
+                                    {% if scan.files_new %}
+                                        <span class="stat-pill new">{{ scan.files_new|thousands_separator }} New</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('routes.scan_details', scan_id=scan.id) }}" class="btn small primary">Details</a>
+                                    <button class="btn small secondary rescan-btn" data-path="{{ scan.top_level_path }}">Rescan</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
 
                 <div class="pagination-controls">

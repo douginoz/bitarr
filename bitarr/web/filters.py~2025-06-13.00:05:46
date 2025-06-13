@@ -61,12 +61,12 @@ def format_size(size_bytes):
 @filters_bp.app_template_filter('strftime')
 def strftime_filter(date_value, format_string='%Y-%m-%d %H:%M:%S'):
     """
-    Format a datetime object or ISO string using strftime with local timezone conversion.
+    Format a datetime object or ISO string using strftime.
     Args:
         date_value: datetime object or ISO string
         format_string: strftime format string
     Returns:
-        str: Formatted date string in local timezone
+        str: Formatted date string
     """
     if not date_value:
         return ""
@@ -78,35 +78,13 @@ def strftime_filter(date_value, format_string='%Y-%m-%d %H:%M:%S'):
             date_value = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
         except ValueError:
             try:
-                # Try parsing without timezone - assume UTC
+                # Try parsing without timezone
                 date_value = datetime.fromisoformat(date_value.split('+')[0].split('Z')[0])
-                # If no timezone info, assume it's UTC
-                from datetime import timezone
-                date_value = date_value.replace(tzinfo=timezone.utc)
             except ValueError:
                 return str(date_value)
 
-    # Handle datetime objects - convert UTC to local time
+    # Handle datetime objects
     if isinstance(date_value, datetime):
-        # If it has timezone info (likely UTC), convert to local time
-        if date_value.tzinfo is not None:
-            # Convert UTC to local time using the system's local timezone
-            import time
-            # Get local timezone offset in seconds
-            if time.daylight:
-                # Daylight saving time is in effect
-                offset_seconds = -time.altzone
-            else:
-                # Standard time
-                offset_seconds = -time.timezone
-
-            # Create local timezone
-            from datetime import timezone, timedelta
-            local_tz = timezone(timedelta(seconds=offset_seconds))
-
-            # Convert to local timezone
-            date_value = date_value.astimezone(local_tz)
-
         return date_value.strftime(format_string)
 
     return str(date_value)

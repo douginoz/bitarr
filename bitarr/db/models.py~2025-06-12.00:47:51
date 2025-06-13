@@ -1,0 +1,20 @@
+def to_dict(self):
+        """Convert the object to a dictionary."""
+        return {
+            "id": self.id,
+            "storage_device_id": self.storage_device_id,
+            "host_id": self.host_id,
+            "check_date": self.check_date,
+            "temperature": self.temperature,
+            "power_on_hours": self.power_on_hours,
+            "total_data_written": self.total_data_written,
+            "bad_sectors_count": self.bad_sectors_count,
+            "wear_leveling_count": self.wear_leveling_count,
+            "health_score": self.health_score,
+            "smart_status": self.smart_status,
+            "smart_raw_data": json.loads(self.smart_raw_data) if isinstance(self.smart_raw_data, str) else self.smart_raw_data,
+            "predicted_failure_date": self.predicted_failure_date,
+            "data_source": self.data_source,
+            "requires_root": self.requires_root,
+            "created_at": self.created_at
+        }

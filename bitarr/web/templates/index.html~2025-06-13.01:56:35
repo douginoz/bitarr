@@ -89,9 +89,8 @@
                             <thead>
                                 <tr>
                                     <th>Status</th>
-                                    <th>Name</th>
                                     <th>Date</th>
-                                    <th>Host</th>
+                                    <th>Host</th> <!-- NEW: Host column -->
                                     <th>Path</th>
                                     <th>Files</th>
                                 </tr>
@@ -112,13 +111,6 @@
                                             <span class="badge badge-danger">Failed</span>
                                         {% else %}
                                             <span class="badge badge-secondary">{{ scan.status }}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if scan.name %}
-                                            <strong>{{ scan.name }}</strong>
-                                        {% else %}
-                                            <em class="text-muted">Unnamed</em>
                                         {% endif %}
                                     </td>
                                     <td class="time-ago" data-timestamp="{{ scan.start_time }}">

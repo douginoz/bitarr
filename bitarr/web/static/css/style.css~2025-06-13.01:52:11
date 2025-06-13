@@ -871,25 +871,3 @@ input:checked + .slider:before {
         width: 100%;
     }
 }
-
-/* Make Recent Scans and Storage Devices table text consistently smaller */
-.dashboard .table-container table {
-    font-size: 14px;
-}
-
-.dashboard .table-container table th,
-.dashboard .table-container table td {
-    font-size: 14px;
-    padding: 8px 12px;
-}
-
-/* Remove any <small> tag styling in dashboard tables */
-.dashboard .table-container small {
-    font-size: inherit;
-}
-
-/* Make badges slightly smaller too */
-.dashboard .badge {
-    font-size: 12px;
-    padding: 2px 6px;
-}

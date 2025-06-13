@@ -3,17 +3,6 @@
 {% block title %}Bitarr - Scan Results{% endblock %}
 
 {% block content %}
-<!-- Calculate error categories first -->
-{% set permission_errors = [] %}
-{% set io_errors = [] %}
-{% for error in errors %}
-    {% if 'permission' in error.error_message.lower() or 'denied' in error.error_message.lower() %}
-        {% set _ = permission_errors.append(error) %}
-    {% else %}
-        {% set _ = io_errors.append(error) %}
-    {% endif %}
-{% endfor %}
-
 <div class="container">
     <!-- Page Header -->
     <div class="page-header">
@@ -111,27 +100,11 @@
                     </tr>
                     <tr class="clickable-row" onclick="showCategory('permission')">
                         <td>Permission Denied:</td>
-                        <td class="{% for error in errors %}{% if 'permission' in error.error_message.lower() or 'denied' in error.error_message.lower() %}result-warning{% endif %}{% endfor %}">
-                            {% set permission_count = 0 %}
-                            {% for error in errors %}
-                                {% if 'permission' in error.error_message.lower() or 'denied' in error.error_message.lower() %}
-                                    {% set permission_count = permission_count + 1 %}
-                                {% endif %}
-                            {% endfor %}
-                            {{ permission_count|thousands_separator }}
-                        </td>
+                        <td class="{% if summary.permission_errors > 0 %}result-warning{% endif %}">{{ summary.permission_errors|default(0)|thousands_separator }}</td>
                     </tr>
                     <tr class="clickable-row" onclick="showCategory('io-errors')">
                         <td>I/O Errors:</td>
-                        <td class="{% for error in errors %}{% if not ('permission' in error.error_message.lower() or 'denied' in error.error_message.lower()) %}result-critical{% endif %}{% endfor %}">
-                            {% set io_error_count = 0 %}
-                            {% for error in errors %}
-                                {% if not ('permission' in error.error_message.lower() or 'denied' in error.error_message.lower()) %}
-                                    {% set io_error_count = io_error_count + 1 %}
-                                {% endif %}
-                            {% endfor %}
-                            {{ io_error_count|thousands_separator }}
-                        </td>
+                        <td class="{% if summary.io_errors > 0 %}result-critical{% endif %}">{{ summary.io_errors|default(0)|thousands_separator }}</td>
                     </tr>
                     <tr class="clickable-row" onclick="showCategory('missing')">
                         <td>Missing:</td>
@@ -143,7 +116,7 @@
     </div>
 
     <!-- Issues Requiring Attention -->
-    {% set total_issues = scan.files_corrupted + scan.files_missing + (permission_errors|length) + (io_errors|length) %}
+    {% set total_issues = scan.files_corrupted + scan.files_missing + summary.error_count %}
     {% if total_issues > 0 %}
     <div class="issues-section">
         <h3 class="section-title">Issues Requiring Attention ({{ total_issues }})</h3>

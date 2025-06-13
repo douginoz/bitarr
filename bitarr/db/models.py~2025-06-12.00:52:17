@@ -61,7 +61,7 @@ class ScanHost:
             "connection_status": self.connection_status,
             "last_seen": self.last_seen,
             "auth_token": self.auth_token,
-            "created_at": self.created_at,
+            "created_at": self.created_at
             "updated_at": self.updated_at
         }
 
