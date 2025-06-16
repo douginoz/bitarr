@@ -2,7 +2,7 @@
 
 Bitarr is a web-based application designed to scan file systems for integrity issues by tracking and comparing file checksums over time. The system enables users to detect file corruption, unauthorized modifications, and missing files across multiple storage devices.
 
-## 🚀 Current Status (v1.1.0 - June 2025)
+## 🚀 Current Status (v1.1.1 - June 14, 2025)
 
 **FULLY WORKING FEATURES:**
 
@@ -26,24 +26,26 @@ Bitarr is a web-based application designed to scan file systems for integrity is
 - Storage device associations with host information
 - Centralized monitoring across multiple machines
 
-✅ **Enhanced Data Display**
+✅ **Enhanced Data Display (v1.1.1)**
 - Total file size calculation and display
 - Proper file count reporting (actual files processed)
 - Scan name display in dashboard and history tables
 - Error categorization (Permission Denied vs I/O Errors)
 - Timezone-aware datetime display
+- Optimized table fonts for better space utilization
 
 ## 🔧 Recently Fixed Issues
 
-**v1.1.0 Milestone Fixes:**
-- 🐛 **FIXED**: Total size calculation now working correctly
+**v1.1.1 Production Release Fixes:**
+- 🐛 **FIXED**: Total size calculation now working correctly with thread-safe accumulation
 - 🐛 **FIXED**: File count display showing actual processed files instead of 0
-- 🐛 **FIXED**: Scan details page with technical layout and proper data
+- 🐛 **FIXED**: Scan details page with technical layout and proper data display
 - 🐛 **FIXED**: Template filters for datetime formatting and timezone conversion
-- 🐛 **FIXED**: Database update_scan method to save total_size field
-- 🐛 **FIXED**: Thread-safe size accumulation during scanning
-- 🐛 **FIXED**: Error categorization and prominent display
+- 🐛 **FIXED**: Database update_scan method to properly save total_size field
+- 🐛 **FIXED**: Thread-safe size accumulation during multi-threaded scanning
+- 🐛 **FIXED**: Error categorization with prominent display and user guidance
 - 🐛 **FIXED**: Dashboard font sizing for better space utilization
+- 🐛 **FIXED**: Scan name columns added to Recent Scans and Scan History tables
 
 ## 🚧 Work in Progress / Planned Features
 
@@ -60,7 +62,7 @@ Bitarr is a web-based application designed to scan file systems for integrity is
 - 🔐 User authentication and access control
 
 **LOW PRIORITY:**
-- 🌐 Multi-user support
+- 🌐 Multi-user support and client/server architecture
 - 📱 Mobile-responsive enhancements
 - 🔌 Plugin system for custom checks
 - ☁️ Cloud storage integration
@@ -128,10 +130,11 @@ python -m bitarr db backup        # Create database backup
 
 **Environment Tested:**
 - Ubuntu Linux with Python 3.11.4
-- 25+ production scans completed with v1.1.0 features
+- 25+ production scans completed with v1.1.1 features
 - Multi-host architecture validated
 - Total size calculation verified across different file sets
 - Error handling tested with permission denied and I/O errors
+- Thread-safe operations validated under concurrent load
 
 **Performance:**
 - Multi-threaded scanning with thread-safe size tracking
@@ -147,16 +150,18 @@ python -m bitarr db backup        # Create database backup
 - ✅ Hardware failure detection (I/O errors, permission issues)
 - ✅ Bitrot detection through checksum comparison
 - ✅ Multi-machine file integrity monitoring
+- ✅ Real hardware corruption detection (validated with actual drive failures)
 
 ## 🤝 Contributing
 
-This project is currently in active development. The core v1.1.0 functionality is stable and ready for production use in homelab environments.
+This project is currently in active development. The core v1.1.1 functionality is stable and ready for production use in homelab environments.
 
 **Current Focus Areas:**
 1. File listing implementation with pagination
 2. Enhanced error diagnostics and recovery guidance
 3. Storage health monitoring integration
 4. Email notification system
+5. Client/server architecture for distributed scanning
 
 ## 📝 License
 
@@ -166,7 +171,7 @@ MIT License - See LICENSE.md for details
 
 - ⚠️ File listing in scan details shows placeholder (implementation in progress)
 - ⚠️ Category filtering not yet implemented (UI ready)
-- ⚠️ Dashboard may not reflect scan error status correctly
+- ⚠️ Dashboard may not reflect scan error status correctly in some edge cases
 - ⚠️ Some edge cases in very large directory scans (>100K files) need optimization
 
 ## 📞 Support

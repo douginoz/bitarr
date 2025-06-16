@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
-ENV/
-env/
 build/
 develop-eggs/
 dist/
@@ -22,37 +19,35 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
+# Virtual environments
+venv/
+env/
+ENV/
 
-# Flask
-instance/
-.webassets-cache
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# SQLite
+# Kate editor backup files
+*~20*
+*.kate-swp
+
+# Database files
 *.db
-*.sqlite
 *.sqlite3
+instance/
 
-# Logs
-logs/
-*.log
-
-# OS specific
+# OS files
 .DS_Store
 Thumbs.db
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

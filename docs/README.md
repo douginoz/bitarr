@@ -1,43 +1,176 @@
-# Bitarr Documentation Index
+# Bitarr - File Integrity Monitoring
 
-## Current Version: v1.1.0 (In Development)
-- [Architecture v1.1.0](v1.1.0/architecture-v1.1.0.md) - Storage-device-centric distributed design
-- [Implementation Roadmap v1.1.0](v1.1.0/implementation-roadmap-v1.1.0.md) - Phase-by-phase development plan
+Bitarr is a web-based application designed to scan file systems for integrity issues by tracking and comparing file checksums over time. The system enables users to detect file corruption, unauthorized modifications, and missing files across multiple storage devices.
 
-## Previous Versions
-- **v1.0.0**: Initial stable release (single-machine architecture)
-  - Architecture documented in git history and README.md
-  - Features: CLI scanning, web interface, basic storage device detection
+## 🚀 Current Status (v1.1.0 - June 2025)
 
-## Documentation Versioning Strategy
+**FULLY WORKING FEATURES:**
 
-### Version Types
-- **Major versions** (v1.x.0): Significant architectural changes, breaking changes
-- **Minor versions** (v1.1.x): Feature additions, API extensions, backward-compatible changes  
-- **Patch versions** (v1.1.1): Bug fixes, documentation clarifications, performance improvements
+✅ **Core Scanning Engine (CLI)**
+- Complete file system scanning with multiple checksum algorithms (SHA-256, SHA-512, BLAKE3, xxHash64, MD5, SHA-1, BLAKE2b)
+- Multi-threaded scanning with thread-safe size calculation
+- SQLite database storage and management
+- Storage device detection and tracking
+- Comprehensive scan summaries with total size reporting
 
-### When to Create New Version Docs
-- ✅ **New major/minor version**: Architectural changes, new features
-- ✅ **Update existing version**: Clarifications, implementation details
-- ✅ **Cross-reference**: Link related concepts between versions
+✅ **Web Interface**
+- Modern, responsive web dashboard with technical scan details page
+- Real-time scan progress with Socket.IO integration
+- New scan modal with configurable parameters
+- Scan history with proper file counts and total sizes
+- Interactive scan results with error categorization
+- Database management interface
 
-### Documentation Maintenance
-1. Copy current version docs to new version directory
-2. Update version references and dates in new documents
-3. Update this index with new version
-4. Commit changes with descriptive message
-5. Tag releases when stable
+✅ **Multi-Host Architecture (v1.1.0)**
+- Host relationship tracking for distributed environments
+- Storage device associations with host information
+- Centralized monitoring across multiple machines
 
-## Architecture Evolution
+✅ **Enhanced Data Display**
+- Total file size calculation and display
+- Proper file count reporting (actual files processed)
+- Scan name display in dashboard and history tables
+- Error categorization (Permission Denied vs I/O Errors)
+- Timezone-aware datetime display
 
-### v1.0.0 → v1.1.0 Key Changes
-- **Single-machine** → **Distributed client-server architecture**
-- **File-centric** → **Storage-device-centric design**
-- **Basic device detection** → **Comprehensive non-root device analysis**
-- **Simple corruption detection** → **Bitrot clustering and pattern analysis**
-- **Local scanning only** → **Remote client scanning with performance monitoring**
+## 🔧 Recently Fixed Issues
 
-### Future Roadmap
-- **v1.2.0**: Scheduled scanning automation, advanced reporting
-- **v1.3.0**: Native NAS support, enterprise features
-- **v2.0.0**: Multi-tenant support, cloud integration
+**v1.1.0 Milestone Fixes:**
+- 🐛 **FIXED**: Total size calculation now working correctly
+- 🐛 **FIXED**: File count display showing actual processed files instead of 0
+- 🐛 **FIXED**: Scan details page with technical layout and proper data
+- 🐛 **FIXED**: Template filters for datetime formatting and timezone conversion
+- 🐛 **FIXED**: Database update_scan method to save total_size field
+- 🐛 **FIXED**: Thread-safe size accumulation during scanning
+- 🐛 **FIXED**: Error categorization and prominent display
+- 🐛 **FIXED**: Dashboard font sizing for better space utilization
+
+## 🚧 Work in Progress / Planned Features
+
+**HIGH PRIORITY:**
+- 📋 File listing with pagination in scan details
+- 📊 Category filtering functionality (click to filter by file status)
+- 🔍 Dashboard status integration (show errors properly)
+- 📧 Email notifications for corruption detection
+
+**MEDIUM PRIORITY:**
+- 🏥 Storage device health monitoring integration
+- 📈 Trend analysis and corruption patterns
+- 📅 Scheduled scan automation
+- 🔐 User authentication and access control
+
+**LOW PRIORITY:**
+- 🌐 Multi-user support
+- 📱 Mobile-responsive enhancements
+- 🔌 Plugin system for custom checks
+- ☁️ Cloud storage integration
+
+## 🏗️ Technical Architecture
+
+- **Backend**: Python 3.11, Flask, SQLAlchemy
+- **Frontend**: HTML5, CSS3, JavaScript, Socket.IO
+- **Database**: SQLite with v1.1.0 host relationship schema
+- **Checksums**: Multiple algorithms via xxhash, blake3, and hashlib
+- **Multi-threading**: Thread-safe file processing and size calculation
+
+## 📦 Installation & Setup
+
+### Prerequisites
+- Python 3.11+
+- Git
+
+### Development Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/douginoz/bitarr.git
+   cd bitarr
+   ```
+
+2. **Set up virtual environment**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Initialize database**
+   ```bash
+   python -m bitarr db init
+   ```
+
+5. **Run web interface**
+   ```bash
+   python -m bitarr web --host 0.0.0.0 --port 8286
+   ```
+
+6. **Access the application**
+   - Web Interface: `http://localhost:8286`
+
+### CLI Usage
+
+**Scan a directory:**
+```bash
+python -m bitarr core scan /path/to/directory --name "My Scan" --algorithm sha256 --threads 4
+```
+
+**Database management:**
+```bash
+python -m bitarr db info          # Show database statistics
+python -m bitarr db backup        # Create database backup
+```
+
+## 🧪 Testing Status
+
+**Environment Tested:**
+- Ubuntu Linux with Python 3.11.4
+- 25+ production scans completed with v1.1.0 features
+- Multi-host architecture validated
+- Total size calculation verified across different file sets
+- Error handling tested with permission denied and I/O errors
+
+**Performance:**
+- Multi-threaded scanning with thread-safe size tracking
+- Real-time progress updates via web interface
+- Efficient SQLite database operations with v1.1.0 schema
+- Memory usage optimized for large file sets
+
+## 🎯 Use Cases Validated
+
+**Technical User Focus:**
+- ✅ Homelab administrators monitoring 2-4 storage devices
+- ✅ Data integrity verification with clear technical reporting
+- ✅ Hardware failure detection (I/O errors, permission issues)
+- ✅ Bitrot detection through checksum comparison
+- ✅ Multi-machine file integrity monitoring
+
+## 🤝 Contributing
+
+This project is currently in active development. The core v1.1.0 functionality is stable and ready for production use in homelab environments.
+
+**Current Focus Areas:**
+1. File listing implementation with pagination
+2. Enhanced error diagnostics and recovery guidance
+3. Storage health monitoring integration
+4. Email notification system
+
+## 📝 License
+
+MIT License - See LICENSE.md for details
+
+## 🐛 Known Issues
+
+- ⚠️ File listing in scan details shows placeholder (implementation in progress)
+- ⚠️ Category filtering not yet implemented (UI ready)
+- ⚠️ Dashboard may not reflect scan error status correctly
+- ⚠️ Some edge cases in very large directory scans (>100K files) need optimization
+
+## 📞 Support
+
+For issues, suggestions, or contributions, please use the GitHub issue tracker.
+
+---
